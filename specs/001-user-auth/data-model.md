@@ -96,14 +96,15 @@ absent. Accounts have no pending, verified, locked, suspended or deleted state i
 
 ### Create user
 
-Input contains normalized personal/address fields and `password_hash`. One parameterized `INSERT`
-returns only `id`, `username` and `email`. No explicit transaction is needed because one statement
-is atomic.
+DAO input contains normalized personal/address fields and `password_hash`. One parameterized
+`INSERT` returns a DAO with only `id`, `username` and `email`. No explicit transaction is needed
+because one statement is atomic.
 
 ### Find credentials by username
 
-Input is canonical lowercase username. One parameterized `SELECT` returns `id`, `username` and
-`password_hash`. The hash remains inside the service login flow and is never mapped to HTTP.
+Input is canonical lowercase username. One parameterized `SELECT` returns a credentials DAO with
+`id`, `username` and `password_hash`. The hash remains inside the service login flow and is never
+mapped to an HTTP DTO.
 
 No repository operation creates, reads, refreshes or revokes JWTs. Token signing and validation use
 the persisted user ID and username but do not mutate the user row.

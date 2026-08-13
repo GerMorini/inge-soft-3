@@ -1,10 +1,11 @@
 <!--
 Sync Impact Report
-- Version change: 1.0.0 → 1.1.0
+- Version change: 1.1.0 → 1.2.0
 - Modified principles:
-  - VIII. Frontend pequeño y explícito → VIII. Frontend pequeño, explícito y consistente
-  - IX. Dependencias justificadas → IX. Dependencias justificadas
-- Added sections: ninguna
+  - III. Backend en tres capas → III. Backend en tres capas con estructuras de frontera explícitas
+  - IV. Organización por módulo funcional → IV. Organización modular con DTO y DAO opcionales
+- Added sections:
+  - Organización interna de módulos
 - Removed sections: ninguna
 - Templates requiring updates:
   - ✅ updated: .specify/templates/plan-template.md
@@ -12,9 +13,7 @@ Sync Impact Report
   - ✅ updated: .specify/templates/tasks-template.md
   - ✅ no change required: .specify/templates/checklist-template.md
   - ✅ no command templates present: .specify/templates/commands/*.md
-  - ✅ updated: specs/001-user-auth/plan.md
-  - ✅ updated: specs/001-user-auth/research.md
-  - ✅ updated: specs/001-user-auth/quickstart.md
+  - ✅ no existing feature artifacts require migration: DTO and DAO directories remain conditional
 - Follow-up TODOs: ninguno
 -->
 # Inge Soft 3 Academic Application Constitution
@@ -43,7 +42,7 @@ solo PUEDEN incorporarse por un requisito posterior explícito de la materia.
 Rationale: un único despliegue conserva integración real sin sumar complejidad operativa ajena al
 objetivo académico.
 
-### III. Backend en tres capas
+### III. Backend en tres capas con estructuras de frontera explícitas
 
 Cada módulo backend DEBE respetar el flujo `controller -> service -> repository`:
 
@@ -58,19 +57,23 @@ Cada módulo backend DEBE respetar el flujo `controller -> service -> repository
   controllers.
 
 Las dependencias `controller -> repository`, `repository -> service` y `repository -> controller`
-están prohibidas.
+están prohibidas. DTO y DAO son estructuras de organización; NO constituyen capas adicionales ni
+alteran este flujo. Los DTO PUEDEN apoyar los límites HTTP o entradas y salidas específicas de casos
+de uso. Los DAO pertenecen exclusivamente al acceso a datos.
 
 Rationale: límites pequeños y explícitos permiten ubicar responsabilidades y probar reglas sin
 arrancar el servidor HTTP.
 
-### IV. Organización por módulo funcional
+### IV. Organización modular con DTO y DAO opcionales
 
 El backend DEBE organizarse por módulo funcional, con una estructura conceptual
-`internal/<module>/{controller,service,repository}`. Cada módulo DEBE contener solamente elementos
-necesarios para sus capacidades actuales. Interfaces, factories, adapters, managers, providers,
-handlers genéricos y buses internos solo PUEDEN crearse cuando resuelvan un problema concreto ya
-presente y documentado. Clean Architecture, arquitectura hexagonal, CQRS, Event Sourcing y DDD
-táctico completo están prohibidos salvo requisito futuro explícito.
+`internal/<module>/{controller,service,repository,dto,dao}`. Los directorios `dto` y `dao` solo
+DEBEN existir cuando haya estructuras que pertenezcan realmente a esas categorías; NO DEBEN crearse
+vacíos, por simetría ni como preparación para requisitos futuros. Cada módulo DEBE contener solamente
+elementos necesarios para sus capacidades actuales. Interfaces, factories, adapters, managers,
+providers, handlers genéricos y buses internos solo PUEDEN crearse cuando resuelvan un problema
+concreto ya presente y documentado. Clean Architecture, arquitectura hexagonal, CQRS, Event Sourcing
+y DDD táctico completo están prohibidos salvo requisito futuro explícito.
 
 Rationale: agrupar por capacidad mantiene próximos cambios relacionados y evita carpetas globales
 que diluyen propiedad funcional.
@@ -159,11 +162,83 @@ que la exige, la alternativa simple evaluada y por qué resulta insuficiente.
 
 Rationale: esta regla resuelve ambigüedades a favor del propósito central del proyecto.
 
+## Organización interna de módulos
+
+Cada módulo backend PUEDE adoptar esta estructura conceptual, conservando únicamente los
+directorios requeridos por sus capacidades actuales:
+
+```text
+internal/
+  <module>/
+    controller/
+    service/
+    repository/
+    dto/
+    dao/
+```
+
+### DTO
+
+El directorio `dto` DEBE contener únicamente estructuras destinadas a transportar datos a través
+de los límites de la aplicación. Esto incluye requests HTTP, responses HTTP y entradas o salidas
+específicas de casos de uso cuando reutilizar una entidad de dominio produciría acoplamiento
+indebido.
+
+Los DTO NO DEBEN contener lógica de negocio ni reglas de dominio. PUEDEN incorporar validación
+estructural básica o parsing simple, como comprobar campos obligatorios o formatos, siempre que no
+decidan reglas de negocio. NO DEBEN representar directamente filas de PostgreSQL. Un DTO separado
+NO DEBE crearse cuando una estructura simple existente satisfaga el límite sin generar acoplamiento
+indebido.
+
+### DAO
+
+El directorio `dao` DEBE contener únicamente estructuras orientadas a persistencia y acceso a
+datos. Un DAO PUEDE representar filas recuperadas desde PostgreSQL, parámetros o resultados de
+queries y estructuras de persistencia que no convenga exponer al resto de las capas.
+
+Los DAO pertenecen al acceso a datos y NO DEBEN contener reglas de negocio, utilizarse como
+responses HTTP ni filtrarse directamente hacia controllers. Repository DEBE convertirlos a una
+estructura apropiada antes de devolverlos cuando exponerlos acople persistencia con otra capa. Un
+DAO separado NO DEBE crearse cuando la estructura persistida coincide de forma simple y segura con
+la estructura usada por el dominio.
+
+### Relaciones y conversiones
+
+El recorrido conceptual de datos es:
+
+```text
+HTTP
+  ↓
+DTO
+  ↓
+Controller
+  ↓
+Service
+  ↓
+Repository
+  ↓
+DAO
+  ↓
+PostgreSQL
+```
+
+Este recorrido NO obliga a crear una estructura o conversión en cada paso. Transformaciones
+redundantes como `DTO -> Model -> Domain -> Entity -> DAO` están prohibidas cuando no resuelven una
+necesidad concreta. DTO y DAO DEBEN evitar acoplamiento entre API HTTP, lógica de negocio y modelo
+de persistencia sin convertirse en capas arquitectónicas adicionales.
+
+DTO y DAO son herramientas de organización. NO DEBEN introducir servicios adicionales, factories
+genéricas, interfaces innecesarias, duplicación sistemática de estructuras ni conversiones sin
+valor concreto. Cuando una estructura pueda reutilizarse sin acoplamiento indebido, DEBE preferirse
+la solución más simple.
+
 ## Restricciones tecnológicas y arquitectónicas
 
 - Stack obligatorio: React con daisyUI y Tailwind CSS, Go y PostgreSQL.
 - Unidad de arquitectura y despliegue: monolito modular; microservicios prohibidos.
 - Flujo backend obligatorio: `controller -> service -> repository` dentro de cada módulo funcional.
+- Estructuras de frontera: `dto` y `dao` opcionales, internas al módulo y justificadas por una
+  necesidad concreta de desacoplamiento; NO son capas adicionales.
 - Persistencia: un esquema relacional PostgreSQL mínimo, con invariantes expresadas mediante
   constraints cuando sea razonable.
 - Configuración: valores ambientales externos al código y secretos fuera del repositorio.
@@ -176,7 +251,9 @@ Rationale: esta regla resuelve ambigüedades a favor del propósito central del 
   borde; NO DEBE incluir capacidades especulativas.
 - Cada plan DEBE superar un Constitution Check antes de investigar o diseñar y repetirlo después del
   diseño. Toda desviación DEBE registrarse en Complexity Tracking.
-- Cada plan DEBE preservar organización modular y límites entre controller, service y repository.
+- Cada plan DEBE preservar organización modular y límites entre controller, service y repository;
+  también DEBE justificar cualquier DTO, DAO o conversión incorporada y omitirlos cuando no aporten
+  separación concreta.
 - Cada plan con interfaz DEBE usar daisyUI sobre Tailwind CSS, reutilizar componentes existentes y
   justificar cualquier CSS, tema o wrapper propio.
 - Cada cambio con comportamiento DEBE incluir pruebas proporcionales a sus reglas y riesgos. El
@@ -200,4 +277,4 @@ Toda especificación, plan, lista de tareas y revisión de código DEBE comproba
 excepciones solo son válidas cuando un requisito actual las exige y quedan justificadas en Complexity
 Tracking. El cumplimiento DEBE revisarse antes de integrar o entregar cada feature.
 
-**Version**: 1.1.0 | **Ratified**: 2026-08-13 | **Last Amended**: 2026-08-13
+**Version**: 1.2.0 | **Ratified**: 2026-08-13 | **Last Amended**: 2026-08-13

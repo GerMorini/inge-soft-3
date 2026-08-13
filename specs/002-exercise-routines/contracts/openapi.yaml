@@ -1,0 +1,524 @@
+openapi: 3.1.0
+info:
+  title: Exercise Routines API
+  version: 1.0.0
+  description: Authenticated private exercises, workout sessions and routines for spec 002.
+servers:
+  - url: /
+security:
+  - bearerAuth: []
+paths:
+  /api/exercises:
+    post:
+      operationId: createExercise
+      summary: Create one exercise owned by the authenticated user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExerciseRequest'
+      responses:
+        '201':
+          description: Exercise created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Exercise'
+        '400':
+          $ref: '#/components/responses/InvalidInput'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listExercises
+      summary: List exercises owned by the authenticated user
+      responses:
+        '200':
+          description: Exercises ordered by identifier
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Exercise'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/exercises/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceID'
+    get:
+      operationId: getExercise
+      summary: Get one owned exercise
+      responses:
+        '200':
+          description: Exercise detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Exercise'
+        '400':
+          $ref: '#/components/responses/InvalidPath'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: deleteExercise
+      summary: Delete one owned exercise and compact affected session orders
+      responses:
+        '204':
+          description: Exercise and its associations deleted; no response body
+        '400':
+          $ref: '#/components/responses/InvalidPath'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/sessions:
+    post:
+      operationId: createWorkoutSession
+      summary: Create one workout session from owned exercises
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+      responses:
+        '201':
+          description: Session created atomically
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionDetail'
+        '400':
+          $ref: '#/components/responses/InvalidInput'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listWorkoutSessions
+      summary: List workout sessions owned by the authenticated user
+      responses:
+        '200':
+          description: Session summaries ordered by identifier
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SessionSummary'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/sessions/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceID'
+    get:
+      operationId: getWorkoutSession
+      summary: Get one owned session with ordered exercises
+      responses:
+        '200':
+          description: Complete session detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionDetail'
+        '400':
+          $ref: '#/components/responses/InvalidPath'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: deleteWorkoutSession
+      summary: Delete one owned session and remove its routine assignments
+      responses:
+        '204':
+          description: Session and its associations deleted; reusable exercises remain
+        '400':
+          $ref: '#/components/responses/InvalidPath'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/routines:
+    post:
+      operationId: createRoutine
+      summary: Create one routine from owned sessions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoutineRequest'
+      responses:
+        '201':
+          description: Routine created atomically
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoutineDetail'
+        '400':
+          $ref: '#/components/responses/InvalidInput'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      operationId: listRoutines
+      summary: List routines owned by the authenticated user
+      responses:
+        '200':
+          description: Routine summaries ordered by identifier
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RoutineSummary'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /api/routines/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceID'
+    get:
+      operationId: getRoutine
+      summary: Get one owned routine with nested sessions and exercises
+      responses:
+        '200':
+          description: Complete routine detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoutineDetail'
+        '400':
+          $ref: '#/components/responses/InvalidPath'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      operationId: deleteRoutine
+      summary: Delete one owned routine and preserve reusable sessions and exercises
+      responses:
+        '204':
+          description: Routine and its assignments deleted; no response body
+        '400':
+          $ref: '#/components/responses/InvalidPath'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    ResourceID:
+      name: id
+      in: path
+      required: true
+      description: Positive resource identifier interpreted within the authenticated user
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+  schemas:
+    CreateExerciseRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name:
+          $ref: '#/components/schemas/Name'
+        description:
+          $ref: '#/components/schemas/OptionalDescriptionInput'
+        imageUrl:
+          $ref: '#/components/schemas/OptionalURLInput'
+        videoUrl:
+          $ref: '#/components/schemas/OptionalURLInput'
+    Exercise:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        name:
+          $ref: '#/components/schemas/Name'
+        description:
+          $ref: '#/components/schemas/Description'
+        imageUrl:
+          $ref: '#/components/schemas/URL'
+        videoUrl:
+          $ref: '#/components/schemas/URL'
+    CreateSessionRequest:
+      type: object
+      additionalProperties: false
+      required: [name, exercises]
+      properties:
+        name:
+          $ref: '#/components/schemas/Name'
+        description:
+          $ref: '#/components/schemas/OptionalDescriptionInput'
+        exercises:
+          type: array
+          description: May be empty; exercise IDs must be unique and order must equal 1..N.
+          items:
+            $ref: '#/components/schemas/SessionExerciseInput'
+    SessionExerciseInput:
+      type: object
+      additionalProperties: false
+      required: [exerciseId, series, repetitions, order]
+      properties:
+        exerciseId:
+          $ref: '#/components/schemas/ID'
+        series:
+          $ref: '#/components/schemas/NonNegativeInteger'
+        repetitions:
+          $ref: '#/components/schemas/NonNegativeInteger'
+        order:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 2147483647
+    SessionSummary:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        name:
+          $ref: '#/components/schemas/Name'
+        description:
+          $ref: '#/components/schemas/Description'
+    SessionExercise:
+      type: object
+      additionalProperties: false
+      required: [exercise, series, repetitions, order]
+      properties:
+        exercise:
+          $ref: '#/components/schemas/Exercise'
+        series:
+          $ref: '#/components/schemas/NonNegativeInteger'
+        repetitions:
+          $ref: '#/components/schemas/NonNegativeInteger'
+        order:
+          type: integer
+          format: int32
+          minimum: 1
+    SessionDetail:
+      type: object
+      additionalProperties: false
+      required: [id, name, exercises]
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        name:
+          $ref: '#/components/schemas/Name'
+        description:
+          $ref: '#/components/schemas/Description'
+        exercises:
+          type: array
+          description: Ordered by execution order ascending.
+          items:
+            $ref: '#/components/schemas/SessionExercise'
+    CreateRoutineRequest:
+      type: object
+      additionalProperties: false
+      required: [name, sessions]
+      properties:
+        name:
+          $ref: '#/components/schemas/Name'
+        description:
+          $ref: '#/components/schemas/OptionalDescriptionInput'
+        sessions:
+          type: array
+          description: May be empty; each session/day pair must be unique.
+          items:
+            $ref: '#/components/schemas/RoutineSessionInput'
+    RoutineSessionInput:
+      type: object
+      additionalProperties: false
+      required: [sessionId, day]
+      properties:
+        sessionId:
+          $ref: '#/components/schemas/ID'
+        day:
+          $ref: '#/components/schemas/DayOfWeek'
+    RoutineSummary:
+      type: object
+      additionalProperties: false
+      required: [id, name]
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        name:
+          $ref: '#/components/schemas/Name'
+        description:
+          $ref: '#/components/schemas/Description'
+    RoutineSession:
+      type: object
+      additionalProperties: false
+      required: [day, session]
+      properties:
+        day:
+          $ref: '#/components/schemas/DayOfWeek'
+        session:
+          $ref: '#/components/schemas/SessionDetail'
+    RoutineDetail:
+      type: object
+      additionalProperties: false
+      required: [id, name, sessions]
+      properties:
+        id:
+          $ref: '#/components/schemas/ID'
+        name:
+          $ref: '#/components/schemas/Name'
+        description:
+          $ref: '#/components/schemas/Description'
+        sessions:
+          type: array
+          description: Ordered by day, then session identifier.
+          items:
+            $ref: '#/components/schemas/RoutineSession'
+    ID:
+      type: integer
+      format: int64
+      minimum: 1
+    Name:
+      type: string
+      minLength: 1
+      maxLength: 100
+      pattern: '^[^\s]+( [^\s]+)*$'
+    Description:
+      type: string
+      minLength: 1
+      maxLength: 500
+      pattern: '^[^\s]+( [^\s]+)*$'
+    OptionalDescriptionInput:
+      type: string
+      maxLength: 500
+      description: Empty string is treated as absent; otherwise the description text rule applies.
+    URL:
+      type: string
+      format: uri
+      maxLength: 2048
+      pattern: '^https?://[^\s]+$'
+    OptionalURLInput:
+      type: string
+      maxLength: 2048
+      description: Empty string is treated as absent; otherwise an absolute HTTP/HTTPS URL is required.
+    NonNegativeInteger:
+      type: integer
+      format: int32
+      minimum: 0
+      maximum: 2147483647
+    DayOfWeek:
+      type: integer
+      format: int32
+      minimum: 1
+      maximum: 7
+      description: 1 Monday, 2 Tuesday, 3 Wednesday, 4 Thursday, 5 Friday, 6 Saturday, 7 Sunday.
+    ErrorBody:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        fields:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          description: May use indexed keys such as exercises.0.order or sessions.1.day.
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorBody'
+  responses:
+    InvalidInput:
+      description: Malformed request or one or more invalid fields/associations
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InvalidPath:
+      description: Path identifier is not a positive int64
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalidPath:
+              value:
+                error:
+                  code: invalid_request
+                  message: Solicitud inválida.
+    InvalidToken:
+      description: Access token is missing, malformed, altered or expired
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalidToken:
+              value:
+                error:
+                  code: invalid_token
+                  message: Token de acceso inválido o vencido.
+    NotFound:
+      description: Resource does not exist or belongs to another user
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            notFound:
+              value:
+                error:
+                  code: not_found
+                  message: Recurso no encontrado.
+    InternalError:
+      description: Unexpected internal error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            internal:
+              value:
+                error:
+                  code: internal_error
+                  message: No se pudo completar la operación.

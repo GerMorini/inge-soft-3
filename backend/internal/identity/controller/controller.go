@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/gmorini/inge-soft-3/backend/internal/identity/dto"
 	identityerrors "github.com/gmorini/inge-soft-3/backend/internal/identity/errors"
 	"github.com/gmorini/inge-soft-3/backend/internal/identity/service"
 	"github.com/gmorini/inge-soft-3/backend/internal/platform/requestctx"
@@ -14,60 +15,10 @@ import (
 
 const maxRequestBody = 16 << 10
 
-type errorResponse struct {
-	Error errorBody `json:"error"`
-}
-
-type errorBody struct {
-	Code    string              `json:"code"`
-	Message string              `json:"message"`
-	Fields  map[string][]string `json:"fields,omitempty"`
-}
-
 type Controller struct {
 	service *service.Service
 	tokens  *service.TokenManager
 	logger  *slog.Logger
-}
-
-type registerRequest struct {
-	FirstName string         `json:"firstName"`
-	LastName  string         `json:"lastName"`
-	Phone     string         `json:"phone"`
-	Address   addressRequest `json:"address"`
-	Username  string         `json:"username"`
-	Email     string         `json:"email"`
-	Password  string         `json:"password"`
-}
-
-type addressRequest struct {
-	Street    string `json:"street"`
-	Number    string `json:"number"`
-	Apartment string `json:"apartment"`
-	City      string `json:"city"`
-	Province  string `json:"province"`
-}
-
-type registeredUserResponse struct {
-	ID       int64  `json:"id"`
-	Username string `json:"username"`
-	Email    string `json:"email"`
-}
-
-type loginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-type loginResponse struct {
-	AccessToken string `json:"accessToken"`
-	TokenType   string `json:"tokenType"`
-	ExpiresIn   int    `json:"expiresIn"`
-}
-
-type currentUserResponse struct {
-	ID       int64  `json:"id"`
-	Username string `json:"username"`
 }
 
 func New(
@@ -84,17 +35,24 @@ func (c *Controller) RegisterRoutes(mux *http.ServeMux) {
 	mux.Handle("GET /api/auth/me", authenticate(c.tokens, c.logger, http.HandlerFunc(c.currentUser)))
 }
 
+func (c *Controller) Authenticate(next http.Handler) http.Handler {
+	return authenticate(c.tokens, c.logger, next)
+}
+
 func (c *Controller) currentUser(w http.ResponseWriter, r *http.Request) {
 	identity, err := requestctx.IdentityFrom(r.Context())
 	if err != nil {
 		writeInvalidToken(w)
 		return
 	}
-	writeJSON(w, http.StatusOK, currentUserResponse{ID: identity.UserID, Username: identity.Username})
+	writeJSON(w, http.StatusOK, dto.CurrentUserResponse{
+		ID:       identity.UserID,
+		Username: identity.Username,
+	})
 }
 
 func (c *Controller) login(w http.ResponseWriter, r *http.Request) {
-	var request loginRequest
+	var request dto.LoginRequest
 	if err := decodeJSON(w, r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "Solicitud inválida.", nil)
 		return
@@ -118,7 +76,7 @@ func (c *Controller) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, loginResponse{
+	writeJSON(w, http.StatusOK, dto.LoginResponse{
 		AccessToken: result.AccessToken,
 		TokenType:   "Bearer",
 		ExpiresIn:   result.ExpiresIn,
@@ -126,7 +84,7 @@ func (c *Controller) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (c *Controller) register(w http.ResponseWriter, r *http.Request) {
-	var request registerRequest
+	var request dto.RegisterRequest
 	if err := decodeJSON(w, r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request", "Solicitud inválida.", nil)
 		return
@@ -173,7 +131,7 @@ func (c *Controller) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, registeredUserResponse{
+	writeJSON(w, http.StatusCreated, dto.RegisteredUserResponse{
 		ID:       created.ID,
 		Username: created.Username,
 		Email:    created.Email,
@@ -218,7 +176,7 @@ func writeError(
 	message string,
 	fields map[string][]string,
 ) {
-	writeJSON(w, status, errorResponse{Error: errorBody{
+	writeJSON(w, status, dto.ErrorResponse{Error: dto.ErrorBody{
 		Code:    code,
 		Message: message,
 		Fields:  fields,

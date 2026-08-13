@@ -10,11 +10,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/gmorini/inge-soft-3/backend/internal/identity/controller"
-	"github.com/gmorini/inge-soft-3/backend/internal/identity/repository"
-	"github.com/gmorini/inge-soft-3/backend/internal/identity/service"
+	identitycontroller "github.com/gmorini/inge-soft-3/backend/internal/identity/controller"
+	identityrepository "github.com/gmorini/inge-soft-3/backend/internal/identity/repository"
+	identityservice "github.com/gmorini/inge-soft-3/backend/internal/identity/service"
 	"github.com/gmorini/inge-soft-3/backend/internal/platform/config"
 	"github.com/gmorini/inge-soft-3/backend/internal/platform/database"
+	routinescontroller "github.com/gmorini/inge-soft-3/backend/internal/routines/controller"
+	routinesrepository "github.com/gmorini/inge-soft-3/backend/internal/routines/repository"
+	routinesservice "github.com/gmorini/inge-soft-3/backend/internal/routines/service"
 )
 
 func main() {
@@ -44,18 +47,22 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	}
 	defer pool.Close()
 
-	identityRepository := repository.New(pool)
-	tokenManager, err := service.NewTokenManager(cfg.JWTSecret)
+	identityRepository := identityrepository.New(pool)
+	tokenManager, err := identityservice.NewTokenManager(cfg.JWTSecret)
 	if err != nil {
 		return err
 	}
-	identityService, err := service.New(identityRepository, tokenManager)
+	identityService, err := identityservice.New(identityRepository, tokenManager)
 	if err != nil {
 		return err
 	}
-	identityController := controller.New(identityService, tokenManager, logger)
+	identityController := identitycontroller.New(identityService, tokenManager, logger)
+	routinesRepository := routinesrepository.New(pool)
+	routinesService := routinesservice.New(routinesRepository)
+	routinesController := routinescontroller.New(routinesService, logger)
 	mux := http.NewServeMux()
 	identityController.RegisterRoutes(mux)
+	routinesController.RegisterRoutes(mux, identityController.Authenticate)
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,

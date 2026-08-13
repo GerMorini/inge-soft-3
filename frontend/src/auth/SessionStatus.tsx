@@ -1,13 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { getCurrentUser } from './api'
 import { clearAccessToken, isAccessTokenExpired, readAccessToken } from './session'
 import type { CurrentUser } from './types'
 
 interface SessionStatusProps {
   onUnauthenticated: () => void
+  children?: ReactNode
 }
 
-export function SessionStatus({ onUnauthenticated }: SessionStatusProps) {
+export function SessionStatus({ onUnauthenticated, children }: SessionStatusProps) {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -33,8 +34,9 @@ export function SessionStatus({ onUnauthenticated }: SessionStatusProps) {
 
   if (loading) {
     return (
-      <div className="card-body">
-        <span className="loading loading-spinner" aria-label="Validando sesión" />
+      <div className="card-body" role="status">
+        <span className="loading loading-spinner" aria-hidden="true" />
+        <span>Validando sesión</span>
       </div>
     )
   }
@@ -45,6 +47,7 @@ export function SessionStatus({ onUnauthenticated }: SessionStatusProps) {
       <div className="alert alert-success" role="status">
         Sesión activa: <strong>{currentUser.username}</strong>
       </div>
+      {children}
       <button className="btn btn-outline" onClick={logout} type="button">Cerrar sesión</button>
     </div>
   )

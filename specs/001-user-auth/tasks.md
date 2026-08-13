@@ -198,6 +198,21 @@ mask each value without changing the backend contract.
 
 ---
 
+## Phase 9: Separación explícita de DTO y DAO
+
+**Purpose**: Apply constitution 1.2.0 to existing identity structures without changing behavior or
+adding architectural layers.
+
+- [X] T059 Move HTTP request, response, and error payload structures into `backend/internal/identity/dto/dto.go` and update controller mappings
+- [X] T060 Move PostgreSQL query input and scanned row structures into `backend/internal/identity/dao/dao.go` and update repository/service usage
+- [X] T061 Update feature plan and data-model decisions for justified DTO/DAO ownership in `specs/001-user-auth/plan.md` and `specs/001-user-auth/data-model.md`
+- [X] T062 Run backend formatting, unit tests, integration compilation, and vet after the structural refactor
+
+**Checkpoint**: HTTP contracts and persistence shapes have explicit owners while the three-layer
+flow and observable behavior remain unchanged.
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -219,6 +234,8 @@ US1 + US2 + US3 + US4
 Phase 7 Polish
     ↓
 Phase 8 Password confirmation follow-up
+    ↓
+Phase 9 DTO/DAO separation
 ```
 
 - **Phase 1** has no dependencies.
@@ -229,6 +246,7 @@ Phase 8 Password confirmation follow-up
 - **US4** depends on US1 registration behavior but not on US2 or US3.
 - **Phase 7** depends on every story selected for delivery.
 - **Phase 8** depends on the existing US1 registration form and its completed baseline tests.
+- **Phase 9** depends on the completed backend and preserves all existing public contracts.
 
 ### Within Each User Story
 

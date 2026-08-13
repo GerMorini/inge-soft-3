@@ -59,6 +59,9 @@ operations and hundreds to low thousands of accounts; no horizontal-scaling desi
 - [x] Design stays within one React + Go + PostgreSQL modular monolith.
 - [x] Backend code is grouped by functional module and follows
       `controller -> service -> repository` without forbidden direct dependencies.
+- [x] HTTP request and response structures live in `identity/dto`; PostgreSQL query inputs and
+      scanned rows live in `identity/dao`. Both packages solve existing coupling without adding
+      layers or redundant domain models.
 - [x] Data design is relational, minimal, constrained where reasonable, and avoids structured JSON.
 - [x] Environment-specific configuration remains outside source; no secrets enter the repository.
 - [x] JWT state remains client-side and ephemeral; PostgreSQL gains no session or token tables.
@@ -70,7 +73,7 @@ operations and hundreds to low thousands of accounts; no horizontal-scaling desi
       current requirement; otherwise it is omitted.
 - [x] Build, test, and run workflows remain clear and locally reproducible.
 
-**Post-design re-check**: PASS after constitution 1.1.0 amendment. Research and Phase 1 artifacts
+**Post-design re-check**: PASS after constitution 1.2.0 amendment. Research and Phase 1 artifacts
 retain the same boundaries. The single table, direct wiring, standard-library HTTP server and local
 UI state remove unnecessary layers. Argon2id and pgx address current persistence requirements. The
 focused JWT library avoids implementing signing and validation manually; one middleware and typed
@@ -104,6 +107,8 @@ backend/
 │   │   ├── database/database.go
 │   │   └── requestctx/identity.go
 │   └── identity/
+│       ├── dto/dto.go
+│       ├── dao/dao.go
 │       ├── controller/
 │       │   ├── controller.go
 │       │   ├── middleware.go
@@ -151,9 +156,12 @@ compose.yaml                 # database, migration, backend and frontend service
 **Structure Decision**: `identity` owns registration, credentials, token issuance and
 authentication. Controllers adapt the contract; service normalizes inputs, enforces rules, hashes
 or compares passwords, and signs or verifies JWTs; repository executes two parameterized
-operations. The authentication middleware extracts a Bearer token, delegates cryptographic
-validation to the identity service and writes only verified user ID and username into a private,
-typed request-context value. Controllers and services never parse the token again. Concrete
+operations. `dto` owns existing HTTP request and response shapes. `dao` owns existing query input
+and scanned persistence shapes. Service-specific inputs and results remain in `service`, avoiding
+an extra domain model and redundant conversions. The authentication middleware extracts a Bearer
+token, delegates cryptographic validation to the identity service and writes only verified user ID
+and username into a private, typed request-context value. Controllers and services never parse the
+token again. Concrete
 dependencies are wired in `main.go`; no service/repository interfaces, DI framework, generic
 repository, ORM or extra domain model are introduced. Platform packages contain only
 configuration, the shared PostgreSQL pool and the typed request metadata helper. Frontend forms

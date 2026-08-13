@@ -23,7 +23,8 @@ backend tests and 4 useful frontend tests. Documentation-only changes may state 
 
 ## Path Conventions
 
-- **Backend**: `backend/internal/<module>/{controller,service,repository}/`
+- **Backend**: `backend/internal/<module>/{controller,service,repository,dto,dao}/`; `dto/` and
+  `dao/` are optional and MUST appear only when the plan identifies concrete structures for them
 - **Backend tests**: beside tested Go packages unless plan.md records an existing simpler layout
 - **Frontend**: `frontend/src/` with tests in `frontend/tests/` or beside tested components
 - Paths MUST follow the concrete structure selected in plan.md
@@ -72,6 +73,10 @@ Examples of foundational tasks (include only when a current story requires them)
 - [ ] T008 Create only models/entities shared by current stories
 - [ ] T009 Configure required error handling and logging
 - [ ] T010 Setup environment configuration without repository secrets
+
+Create DTO or DAO tasks only when the plan identifies a concrete HTTP/use-case boundary or
+persistence-specific structure. Do not generate directory, mapping, or duplicate-type tasks merely
+to mirror the conceptual data flow.
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 

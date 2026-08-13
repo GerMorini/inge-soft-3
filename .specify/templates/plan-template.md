@@ -47,6 +47,9 @@ compatible build integration for frontend; other dependencies require concrete j
 - [ ] Design stays within one React + Go + PostgreSQL modular monolith.
 - [ ] Backend code is grouped by functional module and follows
       `controller -> service -> repository` without forbidden direct dependencies.
+- [ ] DTO and DAO directories are added only for concrete boundary or persistence structures; their
+      mappings prevent coupling without creating extra layers, redundant conversions, or duplicate
+      types without value.
 - [ ] Data design is relational, minimal, constrained where reasonable, and avoids structured JSON.
 - [ ] Environment-specific configuration remains outside source; no secrets enter the repository.
 - [ ] Meaningful backend and frontend behaviors have explicit test coverage contributing toward the
@@ -86,7 +89,9 @@ backend/
     └── <module>/
         ├── controller/
         ├── service/
-        └── repository/
+        ├── repository/
+        ├── dto/               # Optional: only justified boundary structures
+        └── dao/               # Optional: only justified persistence structures
 
 Backend tests live beside tested Go packages unless the plan documents a simpler existing layout.
 

@@ -8,9 +8,11 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gmorini/inge-soft-3/backend/internal/identity/service"
 	"github.com/gmorini/inge-soft-3/backend/internal/platform/requestctx"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func TestAuthenticate(t *testing.T) {
@@ -23,6 +25,18 @@ func TestAuthenticate(t *testing.T) {
 		t.Fatalf("Issue() error: %v", err)
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	expired := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub": "42", "username": "ada_01", "iat": time.Now().Add(-time.Hour).Unix(), "exp": time.Now().Add(-time.Minute).Unix(),
+	})
+	expiredToken, err := expired.SignedString([]byte(strings.Repeat("s", 32)))
+	if err != nil {
+		t.Fatalf("sign expired token: %v", err)
+	}
+	alteredSuffix := "x"
+	if strings.HasSuffix(validToken, alteredSuffix) {
+		alteredSuffix = "y"
+	}
+	alteredToken := validToken[:len(validToken)-1] + alteredSuffix
 
 	tests := []struct {
 		name       string
@@ -34,6 +48,9 @@ func TestAuthenticate(t *testing.T) {
 		{name: "missing header", wantStatus: http.StatusUnauthorized},
 		{name: "wrong scheme", header: "Basic " + validToken, wantStatus: http.StatusUnauthorized},
 		{name: "malformed bearer", header: "Bearer invalid", wantStatus: http.StatusUnauthorized},
+		{name: "altered token", header: "Bearer " + alteredToken, wantStatus: http.StatusUnauthorized},
+		{name: "expired token", header: "Bearer " + expiredToken, wantStatus: http.StatusUnauthorized},
+		{name: "extra space", header: "Bearer  " + validToken, wantStatus: http.StatusUnauthorized},
 	}
 
 	for _, test := range tests {
@@ -54,7 +71,8 @@ func TestAuthenticate(t *testing.T) {
 			request.Header.Set("Authorization", test.header)
 			response := httptest.NewRecorder()
 
-			authenticate(manager, logger, next).ServeHTTP(response, request)
+			controller := &Controller{tokens: manager, logger: logger}
+			controller.Authenticate(next).ServeHTTP(response, request)
 
 			if response.Code != test.wantStatus {
 				t.Errorf("status = %d, want %d", response.Code, test.wantStatus)

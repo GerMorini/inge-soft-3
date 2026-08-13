@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/gmorini/inge-soft-3/backend/internal/identity/dao"
 	identityerrors "github.com/gmorini/inge-soft-3/backend/internal/identity/errors"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -20,7 +21,7 @@ func TestRepository_CreateUser(t *testing.T) {
 	repository := New(pool)
 	apartment := "2 B"
 
-	created, err := repository.CreateUser(t.Context(), CreateUserParams{
+	created, err := repository.CreateUser(t.Context(), dao.CreateUserParams{
 		FirstName:    "Ada",
 		LastName:     "Lovelace",
 		Phone:        "+5493515551234",
@@ -52,7 +53,7 @@ func TestRepository_CreateUser(t *testing.T) {
 func TestRepository_FindCredentialsByUsername(t *testing.T) {
 	pool := integrationPool(t)
 	repository := New(pool)
-	created, err := repository.CreateUser(t.Context(), CreateUserParams{
+	created, err := repository.CreateUser(t.Context(), dao.CreateUserParams{
 		FirstName:    "Ada",
 		LastName:     "Lovelace",
 		Phone:        "+5493515551234",
@@ -83,7 +84,7 @@ func TestRepository_FindCredentialsByUsername(t *testing.T) {
 func TestRepository_CreateUserConflicts(t *testing.T) {
 	pool := integrationPool(t)
 	repository := New(pool)
-	base := CreateUserParams{
+	base := dao.CreateUserParams{
 		FirstName: "Ada", LastName: "Lovelace", Phone: "+5493515551234", Street: "San Martín",
 		StreetNumber: "123", City: "Córdoba", Province: "Córdoba", Username: "ada_01",
 		Email: "ada@example.com", PasswordHash: "$argon2id$v=19$m=19456,t=2,p=1$c2FsdHNhbHRzYWx0MTIzNA$aGFzaGhhc2hoYXNoaGFzaGhhc2hoYXNoaGFzaGhhc2g",
@@ -111,7 +112,7 @@ func TestRepository_CreateUserConflicts(t *testing.T) {
 func TestRepository_CreateUserConcurrentUniqueness(t *testing.T) {
 	pool := integrationPool(t)
 	repository := New(pool)
-	base := CreateUserParams{
+	base := dao.CreateUserParams{
 		FirstName: "Ada", LastName: "Lovelace", Phone: "+5493515551234", Street: "San Martín",
 		StreetNumber: "123", City: "Córdoba", Province: "Córdoba", Username: "same_user",
 		Email: "same@example.com", PasswordHash: "$argon2id$v=19$m=19456,t=2,p=1$c2FsdHNhbHRzYWx0MTIzNA$aGFzaGhhc2hoYXNoaGFzaGhhc2hoYXNoaGFzaGhhc2g",
@@ -168,11 +169,6 @@ func integrationPool(t *testing.T) *pgxpool.Pool {
 	}
 	t.Cleanup(pool.Close)
 
-	migrationPath := filepath.Join("..", "..", "..", "migrations", "001_create_users.up.sql")
-	migration, err := os.ReadFile(migrationPath)
-	if err != nil {
-		t.Fatalf("read migration: %v", err)
-	}
 	lockConnection, err := pool.Acquire(t.Context())
 	if err != nil {
 		t.Fatalf("acquire migration connection: %v", err)
@@ -186,10 +182,17 @@ func integrationPool(t *testing.T) *pgxpool.Pool {
 		}
 		lockConnection.Release()
 	})
-	if _, err := lockConnection.Exec(t.Context(), string(migration)); err != nil {
-		t.Fatalf("apply migration: %v", err)
+	for _, name := range []string{"001_create_users.up.sql", "002_create_exercise_routines.up.sql"} {
+		migrationPath := filepath.Join("..", "..", "..", "migrations", name)
+		migration, err := os.ReadFile(migrationPath)
+		if err != nil {
+			t.Fatalf("read migration %s: %v", name, err)
+		}
+		if _, err := lockConnection.Exec(t.Context(), string(migration)); err != nil {
+			t.Fatalf("apply migration %s: %v", name, err)
+		}
 	}
-	if _, err := lockConnection.Exec(t.Context(), "TRUNCATE TABLE users RESTART IDENTITY"); err != nil {
+	if _, err := lockConnection.Exec(t.Context(), "TRUNCATE TABLE routine_sessions, session_exercises, routines, workout_sessions, exercises, users RESTART IDENTITY"); err != nil {
 		t.Fatalf("clean users: %v", err)
 	}
 	return pool

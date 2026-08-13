@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/gmorini/inge-soft-3/backend/internal/identity/dao"
 	identityerrors "github.com/gmorini/inge-soft-3/backend/internal/identity/errors"
 	"github.com/gmorini/inge-soft-3/backend/internal/identity/repository"
 )
@@ -106,7 +107,7 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (Registered
 		return RegisteredUser{}, fmt.Errorf("hash registration password: %w", err)
 	}
 
-	created, err := s.repository.CreateUser(ctx, repository.CreateUserParams{
+	created, err := s.repository.CreateUser(ctx, dao.CreateUserParams{
 		FirstName:    normalized.FirstName,
 		LastName:     normalized.LastName,
 		Phone:        normalized.Phone,
