@@ -1,0 +1,77 @@
+services:
+  db:
+    image: postgres:18.4-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-inge_soft_3}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  migrate:
+    image: postgres:18.4-alpine
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGUSER: ${POSTGRES_USER:-app}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-inge_soft_3}
+    volumes:
+      - ./backend/migrations:/migrations:ro
+    command:
+      - psql
+      - --set=ON_ERROR_STOP=1
+      - --file=/migrations/001_create_users.up.sql
+    depends_on:
+      db:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: ./backend
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-app}:${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-inge_soft_3}?sslmode=disable
+      HTTP_ADDR: 0.0.0.0:8080
+      JWT_SECRET: ${JWT_SECRET:?define JWT_SECRET with at least 32 bytes}
+    expose:
+      - "8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "127.0.0.1:${APP_PORT:-3000}:80"
+    depends_on:
+      backend:
+        condition: service_started
+    restart: unless-stopped
+
+  test-db:
+    image: postgres:18.4-alpine
+    profiles:
+      - test
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD}
+      POSTGRES_DB: inge_soft_3_test
+    ports:
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+volumes:
+  postgres_data:

@@ -1,0 +1,31 @@
+# Go
+*.exe
+*.test
+*.out
+vendor/
+
+# Node
+node_modules/
+dist/
+build/
+coverage/
+*.log
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+credentials/
+
+# Editors and operating systems
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+.vscode/
+.idea/

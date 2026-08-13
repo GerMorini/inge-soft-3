@@ -1,30 +1,20 @@
 <!--
 Sync Impact Report
-- Version change: plantilla sin versión → 1.0.0
-- Modified principles: ninguno; adopción inicial
-- Added principles:
-  - I. Objetivo académico y simplicidad
-  - II. Monolito modular
-  - III. Backend en tres capas
-  - IV. Organización por módulo funcional
-  - V. Modelo relacional mínimo
-  - VI. Configuración externa y reproducible
-  - VII. Testabilidad arquitectónica
-  - VIII. Frontend pequeño y explícito
-  - IX. Dependencias justificadas
-  - X. Prioridad de decisiones
-  - XI. Simplicidad ante la duda
-- Added sections:
-  - Restricciones tecnológicas y arquitectónicas
-  - Flujo de desarrollo y controles de calidad
-- Removed sections: marcadores y comentarios de plantilla
+- Version change: 1.0.0 → 1.1.0
+- Modified principles:
+  - VIII. Frontend pequeño y explícito → VIII. Frontend pequeño, explícito y consistente
+  - IX. Dependencias justificadas → IX. Dependencias justificadas
+- Added sections: ninguna
+- Removed sections: ninguna
 - Templates requiring updates:
   - ✅ updated: .specify/templates/plan-template.md
-  - ✅ updated: .specify/templates/spec-template.md
+  - ✅ no change required: .specify/templates/spec-template.md
   - ✅ updated: .specify/templates/tasks-template.md
   - ✅ no change required: .specify/templates/checklist-template.md
   - ✅ no command templates present: .specify/templates/commands/*.md
-  - ✅ no runtime guidance documents present
+  - ✅ updated: specs/001-user-auth/plan.md
+  - ✅ updated: specs/001-user-auth/research.md
+  - ✅ updated: specs/001-user-auth/quickstart.md
 - Follow-up TODOs: ninguno
 -->
 # Inge Soft 3 Academic Application Constitution
@@ -119,23 +109,29 @@ prohibido inventar reglas únicamente para aumentar el conteo.
 
 Rationale: los tests son parte del aprendizaje y deben demostrar decisiones reales del sistema.
 
-### VIII. Frontend pequeño y explícito
+### VIII. Frontend pequeño, explícito y consistente
 
 React DEBE implementar una interfaz pequeña mediante componentes simples, formularios validables y
 estados explícitos. Estado local DEBE preferirse mientras sea suficiente. Abstracciones prematuras,
-arquitecturas frontend complejas y dependencias grandes para problemas simples están prohibidas. El
-frontend PUEDE validar entradas y manejar comportamiento visual, pero el backend DEBE conservar la
-autoridad sobre reglas de negocio importantes.
+arquitecturas frontend complejas y dependencias grandes para problemas simples están prohibidas.
+daisyUI DEBE ser el sistema de componentes y estilos de interfaz; DEBE integrarse sobre una versión
+compatible de Tailwind CSS mediante el mecanismo mínimo requerido por el build existente. Los
+componentes estándar de daisyUI DEBEN preferirse antes de crear componentes visuales o CSS propios.
+Un wrapper, tema personalizado o abstracción adicional solo PUEDE agregarse por una necesidad actual
+documentada. El frontend PUEDE validar entradas y manejar comportamiento visual, pero el backend
+DEBE conservar la autoridad sobre reglas de negocio importantes.
 
-Rationale: una interfaz directa reduce estados ocultos y permite probar tanto interacción como
-errores sin duplicar la fuente de verdad.
+Rationale: una interfaz directa y un vocabulario visual común reducen estados ocultos, CSS disperso
+y decisiones visuales repetidas sin trasladar reglas de negocio al cliente.
 
 ### IX. Dependencias justificadas
 
 El número de dependencias DEBE mantenerse reducido. Cada dependencia nueva DEBE documentar una
 ventaja concreta frente a las herramientas existentes. Dependencias experimentales, poco
 mantenidas, innecesariamente complejas, ligadas a servicios externos o perjudiciales para
-compilación, testing, contenerización o despliegue NO DEBEN incorporarse.
+compilación, testing, contenerización o despliegue NO DEBEN incorporarse. daisyUI, Tailwind CSS y la
+integración mínima de Tailwind con el build quedan autorizadas como stack visual obligatorio; esta
+autorización NO se extiende a otras bibliotecas de componentes, iconos, formularios o temas.
 
 Rationale: cada dependencia amplía superficie de aprendizaje, fallos, seguridad y mantenimiento.
 
@@ -165,7 +161,7 @@ Rationale: esta regla resuelve ambigüedades a favor del propósito central del 
 
 ## Restricciones tecnológicas y arquitectónicas
 
-- Stack obligatorio: React, Go y PostgreSQL.
+- Stack obligatorio: React con daisyUI y Tailwind CSS, Go y PostgreSQL.
 - Unidad de arquitectura y despliegue: monolito modular; microservicios prohibidos.
 - Flujo backend obligatorio: `controller -> service -> repository` dentro de cada módulo funcional.
 - Persistencia: un esquema relacional PostgreSQL mínimo, con invariantes expresadas mediante
@@ -181,6 +177,8 @@ Rationale: esta regla resuelve ambigüedades a favor del propósito central del 
 - Cada plan DEBE superar un Constitution Check antes de investigar o diseñar y repetirlo después del
   diseño. Toda desviación DEBE registrarse en Complexity Tracking.
 - Cada plan DEBE preservar organización modular y límites entre controller, service y repository.
+- Cada plan con interfaz DEBE usar daisyUI sobre Tailwind CSS, reutilizar componentes existentes y
+  justificar cualquier CSS, tema o wrapper propio.
 - Cada cambio con comportamiento DEBE incluir pruebas proporcionales a sus reglas y riesgos. El
   conjunto del proyecto DEBE mantener al menos 8 tests útiles de backend y 4 de frontend.
 - Cada revisión DEBE verificar secretos ausentes, configuración externa, dependencias justificadas,
@@ -202,4 +200,4 @@ Toda especificación, plan, lista de tareas y revisión de código DEBE comproba
 excepciones solo son válidas cuando un requisito actual las exige y quedan justificadas en Complexity
 Tracking. El cumplimiento DEBE revisarse antes de integrar o entregar cada feature.
 
-**Version**: 1.0.0 | **Ratified**: 2026-08-13 | **Last Amended**: 2026-08-13
+**Version**: 1.1.0 | **Ratified**: 2026-08-13 | **Last Amended**: 2026-08-13

@@ -20,7 +20,8 @@
 
 **Language/Version**: Go [VERSION] (backend), TypeScript [VERSION] + React [VERSION] (frontend)
 
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]
+**Primary Dependencies**: [backend dependencies]; React, daisyUI, Tailwind CSS and the minimum
+compatible build integration for frontend; other dependencies require concrete justification
 
 **Storage**: PostgreSQL [VERSION] or N/A when the feature has no persistence
 
@@ -50,6 +51,8 @@
 - [ ] Environment-specific configuration remains outside source; no secrets enter the repository.
 - [ ] Meaningful backend and frontend behaviors have explicit test coverage contributing toward the
       project minimum of 8 useful backend tests and 4 useful frontend tests.
+- [ ] Frontend uses daisyUI over Tailwind CSS, prefers existing components, and documents any custom
+      CSS, theme, wrapper, or additional visual dependency that is genuinely required.
 - [ ] Every new dependency, abstraction, pattern, or infrastructure component solves a documented
       current requirement; otherwise it is omitted.
 - [ ] Build, test, and run workflows remain clear and locally reproducible.
@@ -90,7 +93,8 @@ Backend tests live beside tested Go packages unless the plan documents a simpler
 frontend/
 ├── src/
 │   ├── components/
-│   └── pages/
+│   ├── pages/
+│   └── styles.css          # Tailwind CSS + daisyUI entrypoint
 └── tests/
 ```
 

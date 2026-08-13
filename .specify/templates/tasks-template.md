@@ -52,8 +52,9 @@ backend tests and 4 useful frontend tests. Documentation-only changes may state 
 **Purpose**: Project initialization and basic structure
 
 - [ ] T001 Create project structure per implementation plan
-- [ ] T002 Initialize [language] project with [framework] dependencies
-- [ ] T003 [P] Configure linting and formatting tools
+- [ ] T002 Initialize backend and React projects with only planned dependencies
+- [ ] T003 Configure Tailwind CSS and daisyUI through the frontend build
+- [ ] T004 [P] Configure linting and formatting tools
 
 ---
 
@@ -65,12 +66,12 @@ backend tests and 4 useful frontend tests. Documentation-only changes may state 
 
 Examples of foundational tasks (include only when a current story requires them):
 
-- [ ] T004 Setup database schema and migrations framework
-- [ ] T005 [P] Implement only the authentication/authorization required by current stories
-- [ ] T006 [P] Setup required API routes and middleware without generic frameworks
-- [ ] T007 Create only models/entities shared by current stories
-- [ ] T008 Configure required error handling and logging
-- [ ] T009 Setup environment configuration without repository secrets
+- [ ] T005 Setup database schema and migrations framework
+- [ ] T006 [P] Implement only the authentication/authorization required by current stories
+- [ ] T007 [P] Setup required API routes and middleware without generic frameworks
+- [ ] T008 Create only models/entities shared by current stories
+- [ ] T009 Configure required error handling and logging
+- [ ] T010 Setup environment configuration without repository secrets
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -86,17 +87,18 @@ Examples of foundational tasks (include only when a current story requires them)
 
 > **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T010 [P] [US1] Backend test for [business behavior] in backend/internal/[module]/service/[name]_test.go
-- [ ] T011 [P] [US1] Frontend test for [interface behavior] in frontend/tests/[name].test.tsx
+- [ ] T011 [P] [US1] Backend test for [business behavior] in backend/internal/[module]/service/[name]_test.go
+- [ ] T012 [P] [US1] Frontend test for [interface behavior] in frontend/tests/[name].test.tsx
 
 ### Implementation for User Story 1
 
-- [ ] T012 [P] [US1] Add [Entity1] data type in backend/internal/[module]/[entity1].go
-- [ ] T013 [US1] Add PostgreSQL access in backend/internal/[module]/repository/[name].go
-- [ ] T014 [US1] Implement use case in backend/internal/[module]/service/[name].go
-- [ ] T015 [US1] Implement HTTP mapping in backend/internal/[module]/controller/[name].go
-- [ ] T016 [US1] Add validation and error handling
-- [ ] T017 [US1] Add logging for user story 1 operations
+- [ ] T013 [P] [US1] Add [Entity1] data type in backend/internal/[module]/[entity1].go
+- [ ] T014 [US1] Add PostgreSQL access in backend/internal/[module]/repository/[name].go
+- [ ] T015 [US1] Implement use case in backend/internal/[module]/service/[name].go
+- [ ] T016 [US1] Implement HTTP mapping in backend/internal/[module]/controller/[name].go
+- [ ] T017 [US1] Add validation and error handling
+- [ ] T018 [US1] Add logging for user story 1 operations
+- [ ] T019 [US1] Compose frontend with daisyUI components and minimal custom CSS
 
 **Checkpoint**: At this point, User Story 1 should be fully functional and testable independently
 
@@ -110,15 +112,15 @@ Examples of foundational tasks (include only when a current story requires them)
 
 ### Tests for User Story 2 *(required for changed behavior)* ⚠️
 
-- [ ] T018 [P] [US2] Backend test for [business behavior] in backend/internal/[module]/service/[name]_test.go
-- [ ] T019 [P] [US2] Frontend test for [interface behavior] in frontend/tests/[name].test.tsx
+- [ ] T020 [P] [US2] Backend test for [business behavior] in backend/internal/[module]/service/[name]_test.go
+- [ ] T021 [P] [US2] Frontend test for [interface behavior] in frontend/tests/[name].test.tsx
 
 ### Implementation for User Story 2
 
-- [ ] T020 [P] [US2] Add [Entity] data type in backend/internal/[module]/[entity].go
-- [ ] T021 [US2] Implement use case in backend/internal/[module]/service/[name].go
-- [ ] T022 [US2] Implement HTTP mapping in backend/internal/[module]/controller/[name].go
-- [ ] T023 [US2] Integrate with User Story 1 components (if needed)
+- [ ] T022 [P] [US2] Add [Entity] data type in backend/internal/[module]/[entity].go
+- [ ] T023 [US2] Implement use case in backend/internal/[module]/service/[name].go
+- [ ] T024 [US2] Implement HTTP mapping in backend/internal/[module]/controller/[name].go
+- [ ] T025 [US2] Integrate with User Story 1 components (if needed)
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently
 
@@ -132,14 +134,14 @@ Examples of foundational tasks (include only when a current story requires them)
 
 ### Tests for User Story 3 *(required for changed behavior)* ⚠️
 
-- [ ] T024 [P] [US3] Backend test for [business behavior] in backend/internal/[module]/service/[name]_test.go
-- [ ] T025 [P] [US3] Frontend test for [interface behavior] in frontend/tests/[name].test.tsx
+- [ ] T026 [P] [US3] Backend test for [business behavior] in backend/internal/[module]/service/[name]_test.go
+- [ ] T027 [P] [US3] Frontend test for [interface behavior] in frontend/tests/[name].test.tsx
 
 ### Implementation for User Story 3
 
-- [ ] T026 [P] [US3] Add [Entity] data type in backend/internal/[module]/[entity].go
-- [ ] T027 [US3] Implement use case in backend/internal/[module]/service/[name].go
-- [ ] T028 [US3] Implement HTTP mapping in backend/internal/[module]/controller/[name].go
+- [ ] T028 [P] [US3] Add [Entity] data type in backend/internal/[module]/[entity].go
+- [ ] T029 [US3] Implement use case in backend/internal/[module]/service/[name].go
+- [ ] T030 [US3] Implement HTTP mapping in backend/internal/[module]/controller/[name].go
 
 **Checkpoint**: All user stories should now be independently functional
 
@@ -154,6 +156,7 @@ Examples of foundational tasks (include only when a current story requires them)
 **Purpose**: Improvements that affect multiple user stories
 
 - [ ] TXXX [P] Documentation updates in docs/ when required
+- [ ] TXXX Verify daisyUI component reuse and remove unnecessary custom visual wrappers
 - [ ] TXXX Code cleanup and refactoring
 - [ ] TXXX Performance optimization across all stories
 - [ ] TXXX [P] Additional behavior tests needed to preserve backend/frontend minimums

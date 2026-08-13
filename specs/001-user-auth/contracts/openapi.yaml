@@ -1,0 +1,299 @@
+openapi: 3.1.0
+info:
+  title: Identity API
+  version: 1.0.0
+  description: Registration and stateless 30-minute JWT authentication contract.
+servers:
+  - url: /api
+paths:
+  /auth/register:
+    post:
+      operationId: registerUser
+      summary: Register a user account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Account created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisteredUser'
+        '400':
+          description: Malformed request or invalid fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '409':
+          description: Email or username already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /auth/login:
+    post:
+      operationId: loginUser
+      summary: Validate credentials and issue a 30-minute access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Credentials are valid and an access token was issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginSuccess'
+        '400':
+          description: Malformed request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Username does not exist or password is incorrect
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                invalidCredentials:
+                  value:
+                    error:
+                      code: invalid_credentials
+                      message: Username o contraseña inválidos.
+        '500':
+          $ref: '#/components/responses/InternalError'
+  /auth/me:
+    get:
+      operationId: getCurrentUser
+      summary: Return the identity from a valid access token
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Authenticated identity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUser'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '500':
+          $ref: '#/components/responses/InternalError'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - firstName
+        - lastName
+        - phone
+        - address
+        - username
+        - email
+        - password
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 100
+        phone:
+          type: string
+          pattern: '^\+[1-9][0-9]{1,14}$'
+        address:
+          $ref: '#/components/schemas/AddressInput'
+        username:
+          type: string
+          minLength: 3
+          maxLength: 30
+          pattern: '^[A-Za-z0-9._-]+$'
+        email:
+          type: string
+          format: email
+          maxLength: 254
+        password:
+          type: string
+          minLength: 8
+          description: Must include one uppercase letter, three digits and two non-alphanumeric non-space symbols.
+    AddressInput:
+      type: object
+      additionalProperties: false
+      required:
+        - street
+        - number
+        - city
+        - province
+      properties:
+        street:
+          type: string
+          minLength: 1
+          maxLength: 120
+        number:
+          type: string
+          minLength: 1
+          maxLength: 20
+        apartment:
+          type: string
+          maxLength: 20
+        city:
+          type: string
+          minLength: 1
+          maxLength: 100
+        province:
+          type: string
+          minLength: 1
+          maxLength: 100
+    RegisteredUser:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - username
+        - email
+      properties:
+        id:
+          type: integer
+          format: int64
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 30
+        password:
+          type: string
+          minLength: 1
+    LoginSuccess:
+      type: object
+      additionalProperties: false
+      required:
+        - accessToken
+        - tokenType
+        - expiresIn
+      properties:
+        accessToken:
+          type: string
+          minLength: 1
+          description: Signed JWT containing sub, username, iat and exp claims.
+        tokenType:
+          type: string
+          const: Bearer
+        expiresIn:
+          type: integer
+          const: 1800
+          description: Token lifetime in seconds.
+    CurrentUser:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - username
+      properties:
+        id:
+          type: integer
+          format: int64
+        username:
+          type: string
+    FieldErrors:
+      type: object
+      additionalProperties:
+        type: array
+        items:
+          type: string
+    ErrorBody:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+    ValidationErrorBody:
+      type: object
+      additionalProperties: false
+      required:
+        - code
+        - message
+        - fields
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        fields:
+          $ref: '#/components/schemas/FieldErrors'
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorBody'
+    ValidationError:
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          $ref: '#/components/schemas/ValidationErrorBody'
+  responses:
+    InvalidToken:
+      description: Access token is missing, malformed, altered, expired or uses an unsupported algorithm
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            invalidToken:
+              value:
+                error:
+                  code: invalid_token
+                  message: Token de acceso inválido o vencido.
+    InternalError:
+      description: Unexpected internal error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            internal:
+              value:
+                error:
+                  code: internal_error
+                  message: No se pudo completar la operación.
