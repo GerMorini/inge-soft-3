@@ -1,0 +1,149 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		}
+	],
+	"settings": {},
+	"launch": {
+		"version": "0.2.0",
+		"configurations": [
+			{
+				"name": "C++ debug",
+				"type": "cppdbg",
+				"request": "launch",
+				"program": "${workspaceFolder}/main",
+				"args": [],
+				"stopAtEntry": false,
+				"cwd": "${workspaceFolder}",
+				"environment": [],
+				"externalConsole": false,
+				"MIMode": "gdb",
+				"setupCommands": [
+					{
+						"description": "Enable pretty-printing for gdb",
+						"text": "-enable-pretty-printing",
+						"ignoreFailures": true
+					}
+				]
+			},
+			{
+				"name": "C++ compilar y debuggear",
+				"type": "cppdbg",
+				"request": "launch",
+				"preLaunchTask": "compilar",
+				"program": "${workspaceFolder}/main",
+				"args": [],
+				"stopAtEntry": false,
+				"cwd": "${workspaceFolder}",
+				"environment": [],
+				"externalConsole": false,
+				"MIMode": "gdb",
+				"setupCommands": [
+					{
+						"description": "Enable pretty-printing for gdb",
+						"text": "-enable-pretty-printing",
+						"ignoreFailures": true
+					}
+				]
+			},
+			{
+				"name": "Go debug",
+				"type": "go",
+				"request": "launch",
+				"mode": "debug",
+				"program": "${fileDirname}/${fileBasename}",
+				"args": [],
+				"env": {},
+				"console": "integratedTerminal"
+			}
+		]
+	},
+	"tasks": {
+		"version": "2.0.0",
+		"tasks": [
+			{
+				"label": "🔄 Hacer git fetch",
+				"detail": "Hace git fetch para obtener cambios remotos",
+				"type": "shell",
+				"command": "git fetch",
+				"problemMatcher": [],
+				"runOptions": {
+					"runOn": "folderOpen"
+				}
+			},
+			{
+				"label": "🔧 RECOMPILAR",
+				"detail": "Recompila todos los contenedores de docker",
+				"type": "shell",
+				"command": "docker compose up -d --build",
+				"problemMatcher": []
+			},
+			{
+				"label": "🔷 Obtener y limpiar dependencias",
+				"detail": "Obtiene y limpia las dependencias de go",
+				"type": "shell",
+				"command": "go mod tidy",
+				"problemMatcher": []
+			},
+			{
+				"label": "⚙️ Compilar C++ con clang",
+				"detail": "Compila el proyecto",
+				"command": "clang++",
+				"args": [
+					"-Wall",
+					"-O3",
+					"-o",
+					"main",
+					"main.cpp"
+				],
+				"group": {
+					"kind": "build",
+					"isDefault": true
+				},
+				"problemMatcher": []
+			},
+			{
+				"label": "🐹 Compilar Go",
+				"detail": "Compila todo el proyecto",
+				"command": "go",
+				"args": [
+					"build",
+					"."
+				],
+				"group": {
+					"kind": "build",
+					"isDefault": true
+				},
+				"problemMatcher": []
+			},
+			{
+				"label": "🐳 Ejecutar comando en contenedor",
+				"detail": "Ejecuta un comando personalizado en un contenedor",
+				"type": "shell",
+				"command": "docker exec -ti ${input:containerName} ${input:command}",
+				"problemMatcher": []
+			}
+		],
+		"inputs": [
+			{
+				"id": "serviceName",
+				"description": "Nombre del servicio de Docker",
+				"default": "users-api",
+				"type": "promptString"
+			},
+			{
+				"id": "containerName",
+				"description": "Nombre del contenedor",
+				"default": "mysql-users-api",
+				"type": "promptString"
+			},
+			{
+				"id": "command",
+				"description": "Comando a ejecutar",
+				"default": "bash",
+				"type": "promptString"
+			}
+		]
+	}
+}
