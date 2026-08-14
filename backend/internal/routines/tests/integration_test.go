@@ -76,6 +76,13 @@ func TestAuthenticatedRoutineContracts(t *testing.T) {
 	if len(session.Exercises) != 2 {
 		t.Fatalf("session exercises = %#v", session.Exercises)
 	}
+	sessionList := decode[[]struct {
+		ID            int64 `json:"id"`
+		ExerciseCount int64 `json:"exerciseCount"`
+	}](t, perform(t, mux, http.MethodGet, "/api/sessions", firstToken, ""))
+	if len(sessionList) != 1 || sessionList[0].ID != session.ID || sessionList[0].ExerciseCount != 2 {
+		t.Fatalf("session summaries = %#v", sessionList)
+	}
 
 	response = perform(t, mux, http.MethodPost, "/api/sessions", firstToken, `{"name":"Fallida","exercises":[{"exerciseId":`+itoa(foreignExercise.ID)+`,"series":1,"repetitions":1,"order":1}]}`)
 	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "exercises.0.exerciseId") {

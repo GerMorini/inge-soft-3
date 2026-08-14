@@ -194,32 +194,30 @@ large error hierarchy adds abstraction without a second consumer.
 
 **Decision**: Add authenticated local navigation for routines, sessions and exercises. Use buttons
 to move selected exercises up or down, derive order as `index + 1`, and confirm deletion with
-`window.confirm`.
+`window.confirm`. Keep navigation as local state; add only the explicitly requested Lucide icons.
 
 **Rationale**: Local state matches the small interface. Buttons are accessible, deterministic and
 easy to test with current tools. Native confirmation meets the requirement without another modal.
 
 **Alternatives considered**: React Router and global state solve no current navigation problem.
-Drag-and-drop adds accessibility, event and dependency complexity. A custom modal adds state solely
-to replace a sufficient browser control.
+Drag-and-drop adds accessibility, event and dependency complexity. A custom confirmation modal adds
+state solely to replace a sufficient browser control.
 
 ## Frontend editing state
 
-**Decision**: Each existing view keeps one form with a discriminated `create | edit` mode, editing
-identifier and normalized initial draft. Entering edit preloads complete detail and save sends PUT.
-If the current draft differs, cancel or an internal workspace-section change uses `window.confirm`;
-rejecting keeps form and section, accepting discards without PUT. Unchanged forms leave directly.
-Pending saves disable submission; validation and server errors preserve entered data.
+**Decision**: Move each concrete create/edit form into an entity-specific wizard displayed by one
+shared native-dialog shell. Entering edit preloads complete detail and save sends PUT. Backdrop click
+always asks whether to discard; other exit paths and workspace changes retain dirty comparison.
+Pending saves disable submission and closure; validation and server errors preserve entered data.
 
-**Rationale**: One form reuses existing validation, ordering and selection controls without a
-second page hierarchy. Explicit per-view comparison is clearer than a form framework. Session array
-order is meaningful; routine assignment order is canonicalized because only `(sessionId, day)` has
-meaning. The complete response updates list and selected detail without an extra GET.
+**Rationale**: The same wizard shell now has three current consumers, while concrete draft rules
+remain understandable. Session array order is meaningful; routine assignment order is canonicalized
+because only `(sessionId, day)` has meaning. The complete response creates or replaces the matching
+card, then the wizard closes and announces success without GET or automatic detail opening.
 
-**Alternatives considered**: Duplicate edit components drift from creation behavior. A custom modal
-requires dialog focus management when native confirmation already exists. Persisted drafts and a
-generic form framework exceed scope. `beforeunload` for closing or reloading the browser is excluded
-because the clarified scenarios cover cancel and internal section changes only.
+**Alternatives considered**: Separate create/edit screens drift. A generic `useWizardForm<T>`, form
+framework, persisted drafts or global wizard context hide small domain-specific rules. A modal
+library duplicates native `<dialog>` and daisyUI behavior. `beforeunload` remains excluded.
 
 ## Visual constitution alignment
 
@@ -237,14 +235,158 @@ design system or monolithic stylesheet adds abstraction and makes feature styles
 ## Frontend API and media
 
 **Decision**: Add a routines-specific authorized request helper that attaches the stored token,
-maps existing errors and clears authentication on `401`. Render image/video URLs as external links
-with safe link attributes; do not fetch or embed their contents.
+maps existing errors and clears authentication on `401`. The redesigned interface may load external
+images lazily and direct video URLs through native media elements only when details expand. Failed,
+unsupported or page/platform URLs always retain a safe external link; no iframe is created.
 
 **Rationale**: The helper addresses repeated authenticated calls inside one feature without creating
-a global HTTP framework. External media validity is limited to URL syntax by specification.
+a global HTTP framework. Progressive browser-native previews satisfy the visual requirement without
+adding a backend proxy, host allowlist, content inspection or third-party player SDK.
 
 **Alternatives considered**: A third-party HTTP client is unnecessary. Embedding or probing media
-would introduce network behavior and content validation outside scope.
+through arbitrary iframes allows untrusted pages and often fails frame policies. A backend proxy or
+media service changes security, storage and deployment scope. Links alone no longer satisfy the
+requested thumbnails and video previews.
+
+## Session card exercise count
+
+**Decision**: Add `exerciseCount` to `SessionSummary` and derive it in the existing owner-scoped
+session list query with `LEFT JOIN` and `COUNT`. Return zero for empty sessions. Detail responses keep
+their current shape; DAO/DTO expose PostgreSQL `COUNT` as int64 and frontend derives summary count
+from `exercises.length` after POST/PUT.
+
+**Rationale**: Session cards require the count before expansion. One aggregate query provides it
+without loading full details or issuing one request per card. The value is derived and needs no
+column, trigger or migration.
+
+**Alternatives considered**: N detail requests add latency and complexity. Hiding the count until
+expansion contradicts FR-057. Persisting a counter introduces synchronization without need. Adding
+the count to every nested detail duplicates information already represented by the array.
+
+## Media CSP and browser boundary
+
+**Decision**: Extend nginx CSP narrowly with HTTP/HTTPS sources for `img-src` and a new `media-src`;
+keep all script/style/object/frame restrictions. Mount external media only after disclosure, use
+native `<video controls playsInline preload="metadata">`, keep a safe link always visible and show
+textual fallback on `error`. Do not infer support from filename or make HEAD/fetch probes.
+
+**Rationale**: Current `img-src 'self' data:` and implicit `default-src 'self'` block the requested
+remote previews in Docker. The browser is the correct codec/MIME authority. Deferred mounting limits
+unrequested transfers, while a permanent link covers slow, blocked, mixed-content and unsupported
+resources.
+
+**Alternatives considered**: `default-src *` weakens unrelated protections. Proxying or probing media
+adds SSRF/content handling. Host allowlists contradict arbitrary valid URLs. Iframes and platform
+SDKs violate FR-061.
+
+## FitPro wizard composition
+
+**Decision**: Add `ModalDialog`, `WizardDialog`, `SearchableCatalog` and `MediaPreview` as four
+concrete shared components. Add `ExerciseWizard`, `SessionWizard` and `RoutineWizard` for domain
+drafts and payloads. Views retain data fetching, list/detail state, deletion and result application.
+
+**Rationale**: Modal lifecycle, step tabs and searchable catalogs now repeat across three flows;
+media preview/fallback repeats in exercise and routine detail. The catalog component owns filtering
+only, allowing exercise checkboxes and repeatable routine Add actions without a generic selector
+state. Domain validation, summaries and association rules remain explicit in each wizard.
+
+**Alternatives considered**: One generic schema-driven wizard requires configuration objects,
+generic error paths and mappers larger than the three forms. Duplicating complete modal logic risks
+inconsistent focus and discard behavior. Form, modal and drag-and-drop libraries add dependencies
+without solving an unmet browser capability.
+
+## Wizard navigation and dismissal
+
+**Decision**: Present wizard steps as an accessible tablist with bottom-border selection. Tabs,
+Previous and Next can move to any step without validating incomplete fields. Full validation occurs
+only on Save from `Resumen` and sends the user to the first erroneous step. Earlier steps never show
+Save. Backdrop click always uses the supplied discard confirmation; inside clicks never close.
+Escape/Close/Cancel use dirty state. Saving blocks all closing and never asks for confirmation.
+
+**Rationale**: This directly preserves exploratory step navigation and prevents accidental loss or
+duplicate writes. A single close path keeps draft, focus and pending behavior consistent.
+
+**Alternatives considered**: Gating each step contradicts the requirement. Auto-save changes API and
+draft persistence. Nested confirmation dialogs create focus traps; `window.confirm` already provides
+a blocking accessible decision for this academic scope.
+
+## Searchable selection
+
+**Decision**: Implement `SearchableCatalog` as a labelled `input type="search"` plus result list.
+Filtering is case-insensitive and in-memory over the already loaded owner catalog. Session wizard
+results use native checkboxes and preserve hidden selections. Routine results use an `Agregar`
+button; every activation appends a fresh row with no day selected and leaves that session available
+for another activation. Save validates missing days and duplicate `(sessionId, day)` pairs.
+
+**Rationale**: This meets both unique exercise selection and explicitly repeatable session selection
+without a custom combobox keyboard protocol. An unset day avoids creating an invalid default
+duplicate before the user chooses. Academic catalog size makes local filtering appropriate.
+
+**Alternatives considered**: A custom ARIA combobox requires active-descendant, popup and keyboard
+state. Backend search and pagination add endpoints excluded by scope. Native `<select multiple>` has
+poor discoverability and cannot append the same session repeatedly. A single session row with many
+day checkboxes contradicts the selected repeated-search behavior.
+
+## Successful wizard completion
+
+**Decision**: A successful POST/PUT applies its returned representation directly to the matching
+card, closes the wizard, restores focus to a logical view control and announces success. It performs
+no GET and opens no detail modal. Multiple independent `<details>` may remain open simultaneously.
+
+**Rationale**: The mutation response already contains canonical data. Closing completes the task
+without a redundant request or context switch. Independent native disclosures require no accordion
+coordinator and let users compare content.
+
+**Alternatives considered**: Keeping a saved wizard open leaves stale editable state. Opening detail
+adds an unrequested transition. Refetching duplicates current data. Accordion state adds coordination
+and closes information the user may be comparing.
+
+## Supplied gym image
+
+**Decision**: Fetch the user-supplied 5177×3410 JPEG once during implementation, optimize it into a
+versioned local WebP asset and render it as a decorative absolute `<img>` for auth and heroes. Use
+dark base fallback, `object-cover` and overlays; auth receives a stronger left gradient.
+
+**Rationale**: A local asset fulfills the selected visual while keeping Docker builds reproducible,
+avoiding runtime hotlink failure, privacy leakage and third-party availability. An `<img>` permits
+load-error handling unlike CSS background alone.
+
+**Alternatives considered**: Runtime DuckDuckGo/Pinterest hotlinking exposes every user request and
+can disappear. Keeping the original 2.37 MB JPEG increases transfer unnecessarily. A generated
+replacement would not be the image explicitly supplied.
+
+**Source asset**:
+`https://external-content.duckduckgo.com/iu/?u=https%3A%2F%2Fi.pinimg.com%2Foriginals%2F3f%2F5c%2Fe4%2F3f5ce46ff01c0d0bc64a2652c34b5c54.jpg&f=1&nofb=1&ipt=e2731386957c5511a51be9c5a1a411bce361d44cd142e9e0bf3ccdfadaebe346`
+
+## Lucide icon dependency
+
+**Decision**: Add exact `lucide-react@1.31.0`, verified against the npm registry on 2026-08-13. Use
+named imports only for brand, navigation and user actions. Icons inherit `currentColor`; beside-text
+icons are decorative, while icon-only buttons receive contextual accessible names.
+
+**Rationale**: Lucide is explicitly required, supports React 19, includes TypeScript declarations,
+uses tree-shakeable SVG components and has no runtime service. One maintained package is clearer
+than copying many SVG paths into local components.
+
+**Sources**: https://lucide.dev/ and https://www.npmjs.com/package/lucide-react
+
+**Alternatives considered**: Hand-authored SVGs duplicate icon data and violate the requested icon
+source. Dynamic icon registries defeat straightforward tree shaking. A second icon package or generic
+Icon wrapper adds no value.
+
+## Responsive and accessibility strategy
+
+**Decision**: Auth uses one column on small screens and split composition at large widths. Navbar
+wraps without hiding destinations. Cards use one/two-column grids. Dialogs become viewport-width and
+scrollable on mobile. Native `<dialog>`, `<details>`, inputs, checkboxes and buttons carry keyboard
+semantics; opening and closing restore focus. Every touch action remains at least 44 CSS pixels.
+
+**Rationale**: Tailwind breakpoints and native elements satisfy current layouts without JavaScript
+media queries or focus-trap code. Text and opaque/gradient overlays preserve contrast independently
+of the photograph.
+
+**Alternatives considered**: Mobile-specific component trees duplicate behavior. Manual focus traps
+and disclosure widgets are error-prone. Hiding navigation behind hover is inaccessible.
 
 ## Testing levels
 

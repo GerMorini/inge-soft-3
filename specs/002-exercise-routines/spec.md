@@ -10,7 +10,8 @@
 rutinas privadas por usuario. Las rutinas seleccionan sesiones existentes y asignan a cada una un
 día de la semana; las sesiones seleccionan ejercicios existentes y asignan series y repeticiones.
 Cada ejercicio seleccionado también tiene un orden de ejecución dentro de su sesión. Todas las
-operaciones requieren autenticación."
+operaciones requieren autenticación. Rediseñar la interfaz como FitPro con autenticación visual,
+navegación autenticada, cards, detalles colapsables y wizards modales para crear o editar."
 
 ## Clarifications
 
@@ -38,6 +39,21 @@ operaciones requieren autenticación."
 - Q: ¿Qué resultado produce un identificador inválido? → A: Texto no numérico, cero, negativos o
   valores fuera del rango admitido producen una solicitud inválida; únicamente identificadores
   válidos ajenos o inexistentes producen un resultado de recurso no encontrado.
+- Q: ¿Puede una persona avanzar en el wizard con campos incompletos? → A: Sí; puede cambiar a
+  cualquier paso y la validación completa se aplica solamente al guardar.
+- Q: ¿Qué ocurre al hacer click fuera del wizard? → A: Se solicita confirmación con una advertencia
+  equivalente a “Los cambios se perderán, ¿seguro deseas salir?”; guardar nunca pide confirmación.
+- Q: ¿Qué biblioteca de iconos usa la interfaz? → A: `lucide-react`, con iconos acompañados por
+  texto o nombres accesibles y sin usar iconos como único indicador de estado.
+- Q: ¿Cómo deben mostrarse las URLs de video? → A: Usar reproductor nativo para videos directos y
+  mostrar un enlace externo si el navegador no puede reproducirlos.
+- Q: ¿Qué ocurre después de guardar exitosamente desde el wizard? → A: Cerrar el wizard, actualizar
+  la card correspondiente con la respuesta y anunciar el éxito.
+- Q: ¿Cómo se asigna una sesión a varios días desde el wizard? → A: La misma sesión puede
+  seleccionarse repetidamente desde el buscador; cada selección crea una fila de asignación.
+- Q: ¿Dónde se muestra la acción Guardar del wizard? → A: Solamente en el paso final “Resumen”.
+- Q: ¿Cómo deben comportarse los elementos colapsables? → A: Varios elementos del mismo nivel o
+  de niveles anidados pueden permanecer abiertos simultáneamente.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -187,6 +203,40 @@ asociaciones, guarda y comprueba el detalle completo actualizado; cancelar no pe
     apartado, **Then** la interfaz solicita confirmación y conserva la edición si no acepta el
     descarte.
 
+---
+
+### User Story 6 - Gestionar contenido desde la interfaz FitPro (Priority: P6)
+
+Una persona usa una interfaz visual oscura y consistente para autenticarse, navegar entre rutinas,
+sesiones y ejercicios, consultar detalles progresivos y completar creaciones o ediciones mediante
+un wizard modal con pasos visibles.
+
+**Why this priority**: Mejora la comprensión y operación de capacidades ya existentes sin cambiar
+sus reglas, persistencia ni contratos HTTP.
+
+**Independent Test**: Una persona entra desde login, alterna a registro, inicia sesión, recorre las
+tres vistas, abre detalles y completa o abandona los tres wizards usando mouse y teclado.
+
+**Acceptance Scenarios**:
+
+1. **Given** una persona no autenticada, **When** abre la aplicación, **Then** ve la imagen de
+   gimnasio indicada como fondo, un degradado oscuro izquierdo y una card de login sin navbar.
+2. **Given** la card de login, **When** activa “¿No tienes cuenta? Créate una aquí”, **Then** la
+   misma superficie cambia a registro con todos los campos existentes, confirmación de contraseña
+   y controles para ver ambas contraseñas.
+3. **Given** una persona autenticada, **When** entra al workspace, **Then** ve la marca FitPro con
+   icono de mancuerna a la izquierda, navegación centrada y un hero correspondiente al apartado.
+4. **Given** una creación o edición, **When** abre el wizard, **Then** puede recorrer sus pasos por
+   las tabs con borde inferior coloreado aunque existan campos incompletos.
+5. **Given** un wizard abierto, **When** hace click en el backdrop, **Then** la interfaz solicita
+   confirmación antes de cerrar y nunca guarda automáticamente.
+6. **Given** el último paso del wizard, **When** guarda, **Then** no aparece una confirmación extra;
+   el formulario se envía una sola vez y el resultado actualiza la vista.
+7. **Given** una rutina, **When** abre su detalle, **Then** ve sesiones colapsables por día y dentro
+   ejercicios colapsables con miniatura, cantidades, descripción y video cuando estén disponibles.
+8. **Given** sesiones o ejercicios propios, **When** recorre sus cards, **Then** puede expandir sus
+   detalles y dispone de acciones accesibles para editar y eliminar.
+
 ### Edge Cases
 
 - Una rutina o sesión se crea sin elementos seleccionados.
@@ -217,6 +267,14 @@ asociaciones, guarda y comprueba el detalle completo actualizado; cancelar no pe
   modifique campos o asociaciones durante la lectura.
 - La persona cancela después de reordenar o quitar elementos en el formulario de edición.
 - La persona intenta cambiar de apartado con una edición modificada y rechaza el descarte.
+- La persona cambia entre pasos con campos obligatorios vacíos y regresa sin perder el draft.
+- La búsqueda de un multiselect no obtiene coincidencias o oculta elementos ya seleccionados.
+- Una sesión elegida para una rutina se asigna a varios días distintos desde el wizard.
+- La persona hace click dentro del wizard y el evento no se interpreta como click en el backdrop.
+- La persona hace click fuera mientras una operación de guardado está pendiente.
+- Una imagen o video externo no carga, rechaza embedding o usa un formato no reproducible por el
+  navegador.
+- La interfaz se usa a 320 px, con zoom al 200% o con textos y URLs largos.
 - Se elimina el primer ejercicio, uno intermedio o el último de una sesión con varios ejercicios.
 - Se solicita una entidad con un identificador inexistente o perteneciente a otra cuenta.
 - Se usa como identificador texto no numérico, cero, un negativo o un entero fuera del
@@ -228,12 +286,14 @@ asociaciones, guarda y comprueba el detalle completo actualizado; cancelar no pe
 - **In scope**: Crear, listar, consultar en detalle, editar mediante reemplazo completo y eliminar
   ejercicios, sesiones y rutinas propios; seleccionar ejercicios existentes al crear o editar
   sesiones; seleccionar sesiones existentes y asignar días al crear o editar rutinas; validar
-  textos, URLs, enteros y pertenencia; mostrar solamente contenido de la persona autenticada.
+  textos, URLs, enteros y pertenencia; mostrar solamente contenido de la persona autenticada;
+  rediseñar autenticación y workspace; wizards modales; búsqueda local dentro de catálogos ya
+  cargados; previews progresivos de medios externos; iconos Lucide.
 - **Out of scope**: Edición parcial por campos, historial o resolución interactiva de conflictos,
   duplicar entidades, compartirlas, publicarlas, usar
   plantillas, registrar ejecución o progreso, controlar pesos o descansos, ordenar elementos
-  fuera del flujo de creación, buscar, filtrar, paginar, adjuntar archivos y administrar permisos
-  adicionales.
+  fuera del flujo de creación/edición, búsqueda o filtrado en backend, paginar, adjuntar archivos,
+  alojar/procesar medios y administrar permisos adicionales.
 - **Simplicity rationale**: La feature incorpora únicamente tres catálogos privados y sus
   asociaciones necesarias. La edición reemplaza formularios completos y reutiliza las mismas
   validaciones, evitando contratos parciales, historial o capacidades anticipadas.
@@ -337,6 +397,60 @@ asociaciones, guarda y comprueba el detalle completo actualizado; cancelar no pe
 - **FR-043**: Un identificador no numérico, no positivo o fuera del rango entero admitido DEBE
   producir un resultado de solicitud inválida; un identificador positivo válido ajeno o inexistente
   DEBE producir el mismo resultado de recurso no encontrado sin revelar cuál caso ocurrió.
+- **FR-044**: La vista no autenticada DEBE carecer de navbar y usar la imagen de gimnasio indicada
+  por el usuario como fondo visual, con fallback oscuro y un degradado oscuro al lado izquierdo que
+  mantenga legible la card de autenticación.
+- **FR-045**: Login DEBE mostrarse inicialmente dentro de una card e incluir el enlace “¿No tienes
+  cuenta? Créate una aquí”; activarlo DEBE sustituir la card por registro sin navegar a otra página.
+- **FR-046**: Registro DEBE conservar todos los campos, confirmación de contraseña y controles para
+  mostrar u ocultar cada contraseña; también DEBE permitir volver al login.
+- **FR-047**: El workspace autenticado DEBE mostrar una navbar con “FitPro” e icono de mancuerna a
+  la izquierda y controles centrados para “Rutinas”, “Sesiones” y “Ejercicios”.
+- **FR-048**: Cada apartado autenticado DEBE mostrar un hero con la imagen indicada, título del
+  apartado y una descripción breve específica de su función.
+- **FR-049**: Crear y editar rutinas, sesiones y ejercicios DEBE realizarse dentro de un mismo
+  componente wizard reutilizable, presentado como diálogo modal con título y acciones accesibles.
+- **FR-050**: Los pasos del wizard DEBEN mostrarse como tabs con borde inferior coloreado, texto y
+  estado accesible; la persona DEBE poder visitar cualquier paso aunque existan campos incompletos.
+- **FR-051**: Un click sobre el backdrop del wizard DEBE solicitar confirmación mediante una leyenda
+  equivalente a “Los cambios se perderán, ¿seguro deseas salir?”. Rechazar DEBE conservar modal,
+  paso y draft; aceptar DEBE cerrar sin POST ni PUT. Un click dentro NO DEBE activar este flujo.
+- **FR-052**: Guardar desde el wizard NO DEBE solicitar confirmación, DEBE impedir envíos duplicados
+  mientras esté pendiente y, ante rechazo, DEBE conservar el draft y mostrar los errores en el paso
+  correspondiente. La acción Guardar DEBE mostrarse solamente en el paso final “Resumen”; los pasos
+  anteriores DEBEN ofrecer navegación sin realizar escrituras.
+- **FR-053**: El wizard de rutina DEBE contener “Datos básicos”, “Sesiones” y “Resumen”. El segundo
+  paso DEBE ofrecer búsqueda y selección múltiple local. Una sesión DEBE permanecer seleccionable
+  repetidamente desde el buscador y cada selección DEBE crear una fila independiente con su propio
+  selector de día. La combinación sesión/día NO DEBE duplicarse.
+- **FR-054**: El wizard de sesión DEBE contener “Datos básicos”, “Ejercicios” y “Resumen”. El segundo
+  paso DEBE ofrecer búsqueda y selección múltiple local, una lista ordenable y spinboxes no
+  negativos para series y repeticiones; el orden DEBE derivarse de la posición.
+- **FR-055**: El wizard de ejercicio DEBE contener “Datos básicos” y “Resumen”. El primer paso DEBE
+  incluir nombre, descripción y URLs opcionales de imagen y video.
+- **FR-056**: La vista de rutinas DEBE mostrar cards cuyo contenido principal abre el detalle modal,
+  con nombre, descripción y acciones de edición/eliminación separadas abajo a la derecha. El modal
+  DEBE contener sesiones colapsables por día y ejercicios internos colapsables con
+  miniatura, nombre, series, repeticiones, descripción y preview de video cuando exista.
+- **FR-057**: La vista de sesiones DEBE mostrar cards colapsables con nombre, descripción, cantidad
+  de ejercicios y acciones; al expandirlas DEBE listar ejercicios con nombre, series y repeticiones.
+- **FR-058**: La vista de ejercicios DEBE mostrar cards con imagen amplia y nombre; al expandirlas
+  DEBE mostrar descripción y preview de video, además de acciones de edición y eliminación.
+- **FR-059**: La interfaz DEBE usar iconos de `lucide-react` para marca, navegación y acciones
+  principales. Los SVG DEBEN heredar `currentColor`; los decorativos DEBEN ocultarse de tecnologías
+  de asistencia y todo botón solo-icono DEBE poseer nombre accesible contextual.
+- **FR-060**: La interfaz DEBE mantener operación por teclado, foco visible, retorno de foco al
+  cerrar diálogos, nombres accesibles, estados no comunicados solo por color y layout utilizable a
+  320 px y zoom de 200%.
+- **FR-061**: Una URL de video DEBE intentar reproducirse únicamente mediante el reproductor nativo
+  del navegador, sin `iframe` ni integración específica con plataformas. Si el recurso no es un
+  video directo reproducible, la interfaz DEBE conservar un enlace externo seguro y descriptivo.
+- **FR-062**: Después de un POST o PUT exitoso, la interfaz DEBE aplicar la representación devuelta
+  a la card correspondiente, cerrar el wizard, devolver el foco a un punto lógico del apartado y
+  anunciar el éxito. NO DEBE abrir automáticamente otro modal ni realizar un GET adicional.
+- **FR-063**: Los colapsables de rutinas, sesiones y ejercicios DEBEN funcionar de forma
+  independiente. Abrir uno NO DEBE cerrar otros elementos del mismo nivel ni elementos anidados que
+  permanezcan montados.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -413,8 +527,35 @@ asociaciones, guarda y comprueba el detalle completo actualizado; cancelar no pe
 - **TB-030 Backend**: Consulta, edición y eliminación distinguen identificadores inválidos como
   solicitudes inválidas, mientras identificadores válidos ajenos o inexistentes comparten el mismo
   resultado de recurso no encontrado.
+- **TB-031 Frontend**: Login y registro alternan dentro de la misma card, permanecen operativos si
+  la imagen falla y la vista no autenticada no presenta navbar.
+- **TB-032 Frontend**: Navbar FitPro y héroes permiten cambiar de apartado por mouse y teclado sin
+  perder contenido privado ni romper el guard de drafts.
+- **TB-033 Frontend**: El wizard permite salto directo, navegación anterior/siguiente y regreso entre
+  pasos incompletos sin borrar valores ni validar como puerta.
+- **TB-034 Frontend**: Click en backdrop solicita confirmación; rechazar preserva modal, paso y draft,
+  aceptar cierra sin request, y click interno no cierra.
+- **TB-035 Frontend**: Guardar no solicita confirmación, evita doble submit y dirige los errores al
+  primer paso afectado conservando el draft; la acción no aparece fuera de “Resumen”.
+- **TB-036 Frontend**: El multiselect filtra localmente, conserva selecciones ocultas y comunica
+  resultados vacíos; el buscador de rutinas permite elegir repetidamente una sesión para días
+  distintos sin admitir el mismo par, y el selector de sesiones impide ejercicios repetidos.
+- **TB-037 Frontend**: Cards y modal de rutina muestran la jerarquía colapsable completa, incluidos
+  estados vacíos y fallbacks de medios.
+- **TB-038 Frontend**: Cards de sesiones y ejercicios expanden información progresiva y conservan
+  acciones accesibles separadas.
+- **TB-039 Frontend**: Los iconos Lucide no alteran nombres accesibles, foco, semántica de acciones
+  ni contraste del tema.
+- **TB-040 Frontend**: Auth, navbar, héroes, cards, diálogos y controles dinámicos superan axe y
+  verificación manual a 320/768/1280 px y zoom de 200%.
+- **TB-041 Frontend**: Una URL directa reproducible usa controles nativos sin autoplay; una URL no
+  reproducible muestra un enlace externo y nunca crea un `iframe`.
+- **TB-042 Frontend**: Un guardado exitoso cierra el wizard, actualiza la card usando la respuesta,
+  anuncia el resultado y no abre el detalle ni realiza una consulta adicional.
+- **TB-043 Frontend**: Dos o más colapsables del mismo nivel y de niveles anidados pueden permanecer
+  abiertos simultáneamente y operar por teclado.
 
-Esta feature define 20 comportamientos útiles de backend y 10 de frontend, además de reutilizar las
+Esta feature define 20 comportamientos útiles de backend y 23 de frontend, además de reutilizar las
 pruebas de autenticación existentes.
 
 ## Success Criteria *(mandatory)*
@@ -447,6 +588,14 @@ pruebas de autenticación existentes.
   cambios persistidos.
 - **SC-013**: El 100% de las consultas detalladas probadas bajo edición concurrente representa un
   único estado confirmado sin mezclar campos o asociaciones de estados distintos.
+- **SC-014**: El 100% de los wizards probados permite recorrer libremente todos sus pasos y conserva
+  el draft al regresar, aun cuando existan campos incompletos.
+- **SC-015**: El 100% de los clicks de backdrop probados solicita confirmación y ningún descarte
+  aceptado ni guardado cancelado genera una escritura accidental.
+- **SC-016**: El 100% de los detalles probados muestra la jerarquía solicitada y mantiene una
+  alternativa visible cuando una imagen o video no puede reproducirse.
+- **SC-017**: Login, registro, navegación, cards y wizards permanecen utilizables sin scroll
+  horizontal a 320 px y con zoom de 200% en los escenarios guiados.
 
 ## Assumptions
 
@@ -457,8 +606,10 @@ pruebas de autenticación existentes.
   sesión y día no puede duplicarse.
 - Los nombres pueden repetirse porque no se solicitó unicidad.
 - Las descripciones son textos opcionales de una sola línea; una cadena vacía equivale a ausencia.
-- Las URLs opcionales son referencias externas; la aplicación no descarga, valida contenido,
-  aloja ni transforma imágenes o videos.
+- Las URLs opcionales siguen siendo referencias externas. El navegador puede cargar imágenes y
+  videos directos de forma progresiva mediante elementos nativos, pero backend no descarga, valida
+  contenido, aloja, transforma ni actúa como proxy. YouTube, Vimeo, páginas HTML y formatos no
+  reproducibles no se integran: conservan un enlace externo seguro.
 - La numeración semanal sigue la convención ISO: lunes es 1 y domingo es 7.
 - Eliminar una sesión o ejercicio en uso retira automáticamente sus asociaciones y conserva los
   contenedores, que pueden quedar vacíos.
@@ -474,3 +625,9 @@ pruebas de autenticación existentes.
   vacías. Los campos opcionales omitidos o vacíos equivalen a ausencia.
 - Las ediciones concurrentes usan una política simple de última transacción confirmada; no se
   incorporan versiones, ETags, historial ni resolución de conflictos.
+- La imagen de gimnasio suministrada se incorporará como asset local optimizado para evitar una
+  dependencia de hotlink en ejecución; seguirá existiendo un fallback oscuro si el asset falla.
+- La búsqueda de los multiselect opera en memoria sobre catálogos ya cargados y no agrega búsqueda,
+  filtrado ni paginación al backend.
+- El backdrop del wizard siempre solicita confirmación; otros abandonos conservan el guard de
+  cambios existente. Mientras una escritura está pendiente, el wizard no puede cerrarse.

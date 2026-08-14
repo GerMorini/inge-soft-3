@@ -5,7 +5,42 @@
 The feature adds three user-owned reusable entities and two associations. PostgreSQL 18.4 is the
 selected engine. The model uses native relational constraints, no extensions and no JSON. Its write
 surface is normal application DML; service controls transactions for composite use cases. Editing
-reuses this schema and requires no additional migration.
+and the FitPro visual redesign reuse this schema and require no additional migration.
+
+## Transient frontend state
+
+The wizard introduces client-only state. None of it is persisted outside existing POST/PUT payloads.
+
+```text
+WizardState
+├── mode: create | edit
+├── activeStep: integer index
+├── saving: boolean
+├── baseline: normalized initial draft
+├── draft: ExerciseInput | SessionInput | RoutineInput
+└── fieldErrors: map keyed by existing API field paths
+```
+
+- Exercise draft contains scalar writable fields.
+- Session draft contains selected exercises in execution order; each selection contains exercise
+  reference, series and repetitions. `order` is derived as position plus one.
+- Routine draft contains selected `(sessionId, day)` assignments. The normalized baseline sorts by
+  day and session ID because visual row position has no persistent meaning.
+- Search queries and current result visibility are ephemeral. Filtering never mutates selections.
+- Active disclosure cards, detail modal and media fallback states are ephemeral presentation state.
+- Routine catalog search may append the same session repeatedly. Every draft assignment receives a
+  local row key and unset day until the user chooses one; only `(sessionId, day)` reaches the API.
+- Disclosure open state is independent per stable entity/association key and is never persisted.
+- Closing after accepted discard removes the draft without any API request. Successful Save sends
+  the same complete write contract, updates the card from its response and then removes transient
+  state without a follow-up GET.
+
+## Derived response field: Session exercise count
+
+`exerciseCount` is not stored. `GET /api/sessions` derives it with an owner-scoped aggregate over
+`session_exercises` and returns `0` for an empty session. It belongs to `SessionSummary` only;
+session details already expose `exercises` and clients derive their length. Creation/update detail
+responses are projected to summary cards with `exerciseCount = exercises.length`.
 
 ## Logical model
 

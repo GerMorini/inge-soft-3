@@ -10,7 +10,7 @@ import (
 	"strconv"
 
 	"github.com/gmorini/inge-soft-3/backend/internal/platform/requestctx"
-	"github.com/gmorini/inge-soft-3/backend/internal/routines/dao"
+	routines "github.com/gmorini/inge-soft-3/backend/internal/routines"
 	"github.com/gmorini/inge-soft-3/backend/internal/routines/dto"
 	routineserrors "github.com/gmorini/inge-soft-3/backend/internal/routines/errors"
 	"github.com/gmorini/inge-soft-3/backend/internal/routines/service"
@@ -153,7 +153,7 @@ func (c *Controller) listSessions(w http.ResponseWriter, r *http.Request) {
 	}
 	response := make([]dto.SessionSummary, 0, len(sessions))
 	for _, session := range sessions {
-		response = append(response, dto.SessionSummary{ID: session.ID, Name: session.Name, Description: session.Description})
+		response = append(response, dto.SessionSummary{ID: session.ID, Name: session.Name, Description: session.Description, ExerciseCount: session.ExerciseCount})
 	}
 	writeJSON(w, http.StatusOK, response)
 }
@@ -361,7 +361,7 @@ func writeError(w http.ResponseWriter, status int, code, message string, fields 
 	writeJSON(w, status, dto.ErrorResponse{Error: dto.ErrorBody{Code: code, Message: message, Fields: fields}})
 }
 
-func exerciseResponse(exercise dao.Exercise) dto.Exercise {
+func exerciseResponse(exercise routines.Exercise) dto.Exercise {
 	return dto.Exercise{
 		ID: exercise.ID, Name: exercise.Name, Description: exercise.Description,
 		ImageURL: exercise.ImageURL, VideoURL: exercise.VideoURL,
@@ -394,7 +394,7 @@ func routineInput(request dto.CreateRoutineRequest) service.RoutineInput {
 	return service.RoutineInput{Name: request.Name, Description: request.Description, Sessions: selected}
 }
 
-func sessionDetailResponse(session dao.Session) dto.SessionDetail {
+func sessionDetailResponse(session routines.Session) dto.SessionDetail {
 	response := dto.SessionDetail{
 		ID: session.ID, Name: session.Name, Description: session.Description,
 		Exercises: make([]dto.SessionExercise, 0, len(session.Exercises)),
@@ -408,7 +408,7 @@ func sessionDetailResponse(session dao.Session) dto.SessionDetail {
 	return response
 }
 
-func routineDetailResponse(routine dao.Routine) dto.RoutineDetail {
+func routineDetailResponse(routine routines.Routine) dto.RoutineDetail {
 	response := dto.RoutineDetail{
 		ID: routine.ID, Name: routine.Name, Description: routine.Description,
 		Sessions: make([]dto.RoutineSession, 0, len(routine.Sessions)),

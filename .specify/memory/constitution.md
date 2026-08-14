@@ -1,11 +1,11 @@
 <!--
 Sync Impact Report
-- Version change: 1.1.0 → 1.2.0
+- Version change: 1.2.0 → 1.3.0
 - Modified principles:
-  - III. Backend en tres capas → III. Backend en tres capas con estructuras de frontera explícitas
-  - IV. Organización por módulo funcional → IV. Organización modular con DTO y DAO opcionales
+  - VIII. Frontend pequeño, explícito y consistente → VIII. Frontend pequeño, modular y
+    visualmente consistente
 - Added sections:
-  - Organización interna de módulos
+  - Organización de estilos e identidad visual
 - Removed sections: ninguna
 - Templates requiring updates:
   - ✅ updated: .specify/templates/plan-template.md
@@ -13,8 +13,11 @@ Sync Impact Report
   - ✅ updated: .specify/templates/tasks-template.md
   - ✅ no change required: .specify/templates/checklist-template.md
   - ✅ no command templates present: .specify/templates/commands/*.md
-  - ✅ no existing feature artifacts require migration: DTO and DAO directories remain conditional
-- Follow-up TODOs: ninguno
+  - ⚠ pending implementation alignment: frontend/src/styles.css and current feature surfaces must
+    adopt the new style-locality rule and visual palette in a separate implementation change
+- Follow-up TODOs:
+  - Migrate component-specific CSS out of frontend/src/styles.css.
+  - Apply the constitutional dark palette consistently to existing frontend features.
 -->
 # Inge Soft 3 Academic Application Constitution
 
@@ -112,7 +115,7 @@ prohibido inventar reglas únicamente para aumentar el conteo.
 
 Rationale: los tests son parte del aprendizaje y deben demostrar decisiones reales del sistema.
 
-### VIII. Frontend pequeño, explícito y consistente
+### VIII. Frontend pequeño, modular y visualmente consistente
 
 React DEBE implementar una interfaz pequeña mediante componentes simples, formularios validables y
 estados explícitos. Estado local DEBE preferirse mientras sea suficiente. Abstracciones prematuras,
@@ -121,8 +124,11 @@ daisyUI DEBE ser el sistema de componentes y estilos de interfaz; DEBE integrars
 compatible de Tailwind CSS mediante el mecanismo mínimo requerido por el build existente. Los
 componentes estándar de daisyUI DEBEN preferirse antes de crear componentes visuales o CSS propios.
 Un wrapper, tema personalizado o abstracción adicional solo PUEDE agregarse por una necesidad actual
-documentada. El frontend PUEDE validar entradas y manejar comportamiento visual, pero el backend
-DEBE conservar la autoridad sobre reglas de negocio importantes.
+documentada. Los estilos específicos DEBEN permanecer próximos al componente o feature que afectan;
+un archivo CSS global NO DEBE concentrar estilos específicos de múltiples componentes, páginas o
+features. La interfaz DEBE ser predominantemente oscura y aplicar la paleta constitucional según su
+función semántica. El frontend PUEDE validar entradas y manejar comportamiento visual, pero el
+backend DEBE conservar la autoridad sobre reglas de negocio importantes.
 
 Rationale: una interfaz directa y un vocabulario visual común reducen estados ocultos, CSS disperso
 y decisiones visuales repetidas sin trasladar reglas de negocio al cliente.
@@ -232,9 +238,55 @@ genéricas, interfaces innecesarias, duplicación sistemática de estructuras ni
 valor concreto. Cuando una estructura pueda reutilizarse sin acoplamiento indebido, DEBE preferirse
 la solución más simple.
 
+## Organización de estilos e identidad visual
+
+### Organización de estilos
+
+Los estilos DEBEN mantenerse modulares, localizados y fáciles de rastrear. Está prohibido crear o
+convertir un archivo global, como `styles.css`, en un archivo monolítico que concentre estilos
+específicos de componentes, páginas o features de toda la aplicación.
+
+- Los componentes y clases proporcionados por daisyUI DEBEN ser la primera opción.
+- Las utilidades de Tailwind CSS DEBEN usarse para ajustes específicos cuando sean suficientes.
+- Los estilos específicos DEBEN permanecer junto al componente, feature o responsabilidad a la que
+  pertenecen.
+- Cuando CSS personalizado sea necesario, DEBE dividirse por componente, feature o responsabilidad
+  coherente.
+- El CSS global DEBE limitarse a reset, tipografía base, variables o tokens de diseño, configuración
+  general del documento y la integración mínima requerida por Tailwind y daisyUI.
+- No se DEBEN crear abstracciones visuales, wrappers ni sistemas de diseño adicionales cuando
+  daisyUI y Tailwind resuelvan el requisito actual.
+- La duplicación significativa DEBE reducirse cuando exista un patrón estable. Repeticiones pequeñas
+  NO justifican por sí solas una abstracción nueva.
+
+Al inspeccionar un componente, un desarrollador DEBE poder localizar de forma directa los estilos
+que afectan su apariencia sin buscar reglas específicas dentro de un archivo CSS global extenso.
+
+### Identidad visual
+
+La interfaz DEBE ser predominantemente oscura y conservar una identidad visual uniforme en todas
+las features. La paleta obligatoria es:
+
+| Función | Color | Uso obligatorio |
+|---|---|---|
+| Fondo principal | `#1c1d1e` | Fondo general de aplicación |
+| Superficie secundaria | `#252728` | Cards, formularios, navegación y paneles |
+| Primario | `#b6ff57` | Acciones principales y elementos destacados |
+| Secundario | `#5d58f3` | Acciones secundarias, selección y enlaces |
+| Acento | `#ff7cff` | Indicadores o detalles decorativos no críticos |
+| Error | `#ee0000` | Errores, advertencias críticas y acciones destructivas |
+
+Los colores DEBEN utilizarse según su función semántica y de forma consistente. Ninguna feature
+PUEDE introducir una paleta alternativa sin una enmienda previa a esta constitución. Legibilidad,
+contraste y simplicidad visual DEBEN prevalecer sobre decoración. El color NO DEBE ser el único
+medio para comunicar estado, error, selección o importancia.
+
 ## Restricciones tecnológicas y arquitectónicas
 
 - Stack obligatorio: React con daisyUI y Tailwind CSS, Go y PostgreSQL.
+- Estilos frontend: específicos y localizados por componente o feature; CSS global limitado a
+  responsabilidades verdaderamente globales.
+- Identidad visual: interfaz oscura y paleta semántica constitucional obligatoria.
 - Unidad de arquitectura y despliegue: monolito modular; microservicios prohibidos.
 - Flujo backend obligatorio: `controller -> service -> repository` dentro de cada módulo funcional.
 - Estructuras de frontera: `dto` y `dao` opcionales, internas al módulo y justificadas por una
@@ -255,7 +307,8 @@ la solución más simple.
   también DEBE justificar cualquier DTO, DAO o conversión incorporada y omitirlos cuando no aporten
   separación concreta.
 - Cada plan con interfaz DEBE usar daisyUI sobre Tailwind CSS, reutilizar componentes existentes y
-  justificar cualquier CSS, tema o wrapper propio.
+  justificar cualquier CSS, tema o wrapper propio. También DEBE identificar dónde vivirá cada CSS
+  específico, preservar el alcance global mínimo y comprobar la paleta semántica constitucional.
 - Cada cambio con comportamiento DEBE incluir pruebas proporcionales a sus reglas y riesgos. El
   conjunto del proyecto DEBE mantener al menos 8 tests útiles de backend y 4 de frontend.
 - Cada revisión DEBE verificar secretos ausentes, configuración externa, dependencias justificadas,
@@ -277,4 +330,4 @@ Toda especificación, plan, lista de tareas y revisión de código DEBE comproba
 excepciones solo son válidas cuando un requisito actual las exige y quedan justificadas en Complexity
 Tracking. El cumplimiento DEBE revisarse antes de integrar o entregar cada feature.
 
-**Version**: 1.2.0 | **Ratified**: 2026-08-13 | **Last Amended**: 2026-08-13
+**Version**: 1.3.0 | **Ratified**: 2026-08-13 | **Last Amended**: 2026-08-13

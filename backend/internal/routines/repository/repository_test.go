@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gmorini/inge-soft-3/backend/internal/routines/dao"
+	routines "github.com/gmorini/inge-soft-3/backend/internal/routines"
 	routineserrors "github.com/gmorini/inge-soft-3/backend/internal/routines/errors"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -22,18 +22,18 @@ func TestExercisePersistenceIsOwnerScoped(t *testing.T) {
 	secondUser := seedUser(t, pool, "second")
 	description := "Con barra"
 
-	first, err := repository.CreateExercise(t.Context(), dao.CreateExerciseParams{UserID: firstUser, Name: "Sentadilla", Description: &description})
+	first, err := repository.CreateExercise(t.Context(), routines.ExerciseWrite{UserID: firstUser, Name: "Sentadilla", Description: &description})
 	if err != nil {
 		t.Fatalf("create first exercise: %v", err)
 	}
-	second, err := repository.CreateExercise(t.Context(), dao.CreateExerciseParams{UserID: firstUser, Name: "Sentadilla"})
+	second, err := repository.CreateExercise(t.Context(), routines.ExerciseWrite{UserID: firstUser, Name: "Sentadilla"})
 	if err != nil {
 		t.Fatalf("create duplicate-name exercise: %v", err)
 	}
 	if second.Description != nil {
 		t.Fatalf("optional description = %v", second.Description)
 	}
-	if _, err := repository.CreateExercise(t.Context(), dao.CreateExerciseParams{UserID: secondUser, Name: "Plancha"}); err != nil {
+	if _, err := repository.CreateExercise(t.Context(), routines.ExerciseWrite{UserID: secondUser, Name: "Plancha"}); err != nil {
 		t.Fatalf("seed foreign exercise: %v", err)
 	}
 
@@ -57,10 +57,10 @@ func TestSessionRoutinePersistenceAndCascades(t *testing.T) {
 	repository := New(pool)
 	userID := seedUser(t, pool, "owner")
 	foreignUserID := seedUser(t, pool, "foreign")
-	first, _ := repository.CreateExercise(t.Context(), dao.CreateExerciseParams{UserID: userID, Name: "Primero"})
-	middle, _ := repository.CreateExercise(t.Context(), dao.CreateExerciseParams{UserID: userID, Name: "Segundo"})
-	last, _ := repository.CreateExercise(t.Context(), dao.CreateExerciseParams{UserID: userID, Name: "Tercero"})
-	foreign, _ := repository.CreateExercise(t.Context(), dao.CreateExerciseParams{UserID: foreignUserID, Name: "Ajeno"})
+	first, _ := repository.CreateExercise(t.Context(), routines.ExerciseWrite{UserID: userID, Name: "Primero"})
+	middle, _ := repository.CreateExercise(t.Context(), routines.ExerciseWrite{UserID: userID, Name: "Segundo"})
+	last, _ := repository.CreateExercise(t.Context(), routines.ExerciseWrite{UserID: userID, Name: "Tercero"})
+	foreign, _ := repository.CreateExercise(t.Context(), routines.ExerciseWrite{UserID: foreignUserID, Name: "Ajeno"})
 
 	tx, err := repository.Begin(t.Context())
 	if err != nil {
@@ -70,11 +70,11 @@ func TestSessionRoutinePersistenceAndCascades(t *testing.T) {
 	if err != nil || len(found) != 3 {
 		t.Fatalf("lock exercises = %v, %v", found, err)
 	}
-	sessionID, err := repository.CreateSession(t.Context(), tx, dao.CreateSessionParams{UserID: userID, Name: "Sesión"})
+	sessionID, err := repository.CreateSession(t.Context(), tx, routines.SessionWrite{UserID: userID, Name: "Sesión"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	err = repository.AddSessionExercises(t.Context(), tx, userID, sessionID, []dao.SelectedExercise{
+	err = repository.AddSessionExercises(t.Context(), tx, userID, sessionID, []routines.SelectedExercise{
 		{ExerciseID: first.ID, Series: 1, Repetitions: 2, Order: 1},
 		{ExerciseID: middle.ID, Series: 3, Repetitions: 4, Order: 2},
 		{ExerciseID: last.ID, Series: 5, Repetitions: 6, Order: 3},
@@ -90,10 +90,18 @@ func TestSessionRoutinePersistenceAndCascades(t *testing.T) {
 	if err != nil || len(detail.Exercises) != 3 || detail.Exercises[1].Order != 2 {
 		t.Fatalf("session detail = %+v, %v", detail, err)
 	}
+	summaries, err := repository.ListSessions(t.Context(), userID)
+	if err != nil || len(summaries) != 1 || summaries[0].ExerciseCount != 3 {
+		t.Fatalf("session summaries = %+v, %v", summaries, err)
+	}
+	foreignSummaries, err := repository.ListSessions(t.Context(), foreignUserID)
+	if err != nil || len(foreignSummaries) != 0 {
+		t.Fatalf("foreign session summaries = %+v, %v", foreignSummaries, err)
+	}
 
 	badTx, _ := repository.Begin(t.Context())
-	badSession, _ := repository.CreateSession(t.Context(), badTx, dao.CreateSessionParams{UserID: userID, Name: "Debe revertirse"})
-	if err := repository.AddSessionExercises(t.Context(), badTx, userID, badSession, []dao.SelectedExercise{{ExerciseID: foreign.ID, Order: 1}}); err == nil {
+	badSession, _ := repository.CreateSession(t.Context(), badTx, routines.SessionWrite{UserID: userID, Name: "Debe revertirse"})
+	if err := repository.AddSessionExercises(t.Context(), badTx, userID, badSession, []routines.SelectedExercise{{ExerciseID: foreign.ID, Order: 1}}); err == nil {
 		t.Fatal("cross-owner association succeeded")
 	}
 	_ = badTx.Rollback(t.Context())
@@ -103,8 +111,8 @@ func TestSessionRoutinePersistenceAndCascades(t *testing.T) {
 	}
 
 	tx, _ = repository.Begin(t.Context())
-	routineID, _ := repository.CreateRoutine(t.Context(), tx, dao.CreateRoutineParams{UserID: userID, Name: "Semana"})
-	err = repository.AddRoutineSessions(t.Context(), tx, userID, routineID, []dao.SelectedSession{{SessionID: sessionID, Day: 1}, {SessionID: sessionID, Day: 7}})
+	routineID, _ := repository.CreateRoutine(t.Context(), tx, routines.RoutineWrite{UserID: userID, Name: "Semana"})
+	err = repository.AddRoutineSessions(t.Context(), tx, userID, routineID, []routines.SelectedSession{{SessionID: sessionID, Day: 1}, {SessionID: sessionID, Day: 7}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,8 +125,8 @@ func TestSessionRoutinePersistenceAndCascades(t *testing.T) {
 	}
 
 	tx, _ = repository.Begin(t.Context())
-	secondSessionID, _ := repository.CreateSession(t.Context(), tx, dao.CreateSessionParams{UserID: userID, Name: "Sesión reutilizada"})
-	if err := repository.AddSessionExercises(t.Context(), tx, userID, secondSessionID, []dao.SelectedExercise{
+	secondSessionID, _ := repository.CreateSession(t.Context(), tx, routines.SessionWrite{UserID: userID, Name: "Sesión reutilizada"})
+	if err := repository.AddSessionExercises(t.Context(), tx, userID, secondSessionID, []routines.SelectedExercise{
 		{ExerciseID: first.ID, Series: 9, Repetitions: 9, Order: 1},
 		{ExerciseID: middle.ID, Series: 8, Repetitions: 8, Order: 2},
 		{ExerciseID: last.ID, Series: 7, Repetitions: 7, Order: 3},
@@ -209,19 +217,19 @@ func TestUpdatePrimitivesAndFlatDetails(t *testing.T) {
 	pool := integrationPool(t)
 	repository := New(pool)
 	userID := seedUser(t, pool, "updates")
-	first, err := repository.CreateExercise(t.Context(), dao.CreateExerciseParams{UserID: userID, Name: "Remo"})
+	first, err := repository.CreateExercise(t.Context(), routines.ExerciseWrite{UserID: userID, Name: "Remo"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, _ := repository.CreateExercise(t.Context(), dao.CreateExerciseParams{UserID: userID, Name: "Plancha"})
+	second, _ := repository.CreateExercise(t.Context(), routines.ExerciseWrite{UserID: userID, Name: "Plancha"})
 	description := "Actualizado"
-	updatedExercise, err := repository.UpdateExercise(t.Context(), userID, first.ID, dao.UpdateExerciseParams{Name: "Remo sentado", Description: &description})
+	updatedExercise, err := repository.UpdateExercise(t.Context(), userID, first.ID, routines.ExerciseWrite{Name: "Remo sentado", Description: &description})
 	if err != nil || updatedExercise.ID != first.ID || updatedExercise.Name != "Remo sentado" {
 		t.Fatalf("updated exercise = %+v, %v", updatedExercise, err)
 	}
 
 	tx, _ := repository.Begin(t.Context())
-	sessionID, _ := repository.CreateSession(t.Context(), tx, dao.CreateSessionParams{UserID: userID, Name: "Vacía"})
+	sessionID, _ := repository.CreateSession(t.Context(), tx, routines.SessionWrite{UserID: userID, Name: "Vacía"})
 	if err := tx.Commit(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -242,13 +250,13 @@ func TestUpdatePrimitivesAndFlatDetails(t *testing.T) {
 	if err := repository.LockSession(t.Context(), tx, userID, sessionID); err != nil {
 		t.Fatal(err)
 	}
-	if err := repository.UpdateSessionFields(t.Context(), tx, userID, sessionID, dao.UpdateSessionParams{Name: "Fuerza", Description: &description}); err != nil {
+	if err := repository.UpdateSessionFields(t.Context(), tx, userID, sessionID, routines.SessionWrite{Name: "Fuerza", Description: &description}); err != nil {
 		t.Fatal(err)
 	}
 	if err := repository.ClearSessionExercises(t.Context(), tx, userID, sessionID); err != nil {
 		t.Fatal(err)
 	}
-	if err := repository.AddSessionExercises(t.Context(), tx, userID, sessionID, []dao.SelectedExercise{
+	if err := repository.AddSessionExercises(t.Context(), tx, userID, sessionID, []routines.SelectedExercise{
 		{ExerciseID: second.ID, Series: 4, Repetitions: 20, Order: 1},
 		{ExerciseID: first.ID, Series: 3, Repetitions: 8, Order: 2},
 	}); err != nil {
@@ -263,7 +271,7 @@ func TestUpdatePrimitivesAndFlatDetails(t *testing.T) {
 	}
 
 	tx, _ = repository.Begin(t.Context())
-	routineID, _ := repository.CreateRoutine(t.Context(), tx, dao.CreateRoutineParams{UserID: userID, Name: "Vacía"})
+	routineID, _ := repository.CreateRoutine(t.Context(), tx, routines.RoutineWrite{UserID: userID, Name: "Vacía"})
 	if err := tx.Commit(t.Context()); err != nil {
 		t.Fatal(err)
 	}
@@ -284,13 +292,13 @@ func TestUpdatePrimitivesAndFlatDetails(t *testing.T) {
 	if err := repository.LockRoutine(t.Context(), tx, userID, routineID); err != nil {
 		t.Fatal(err)
 	}
-	if err := repository.UpdateRoutineFields(t.Context(), tx, userID, routineID, dao.UpdateRoutineParams{Name: "Semana"}); err != nil {
+	if err := repository.UpdateRoutineFields(t.Context(), tx, userID, routineID, routines.RoutineWrite{Name: "Semana"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := repository.ClearRoutineSessions(t.Context(), tx, userID, routineID); err != nil {
 		t.Fatal(err)
 	}
-	if err := repository.AddRoutineSessions(t.Context(), tx, userID, routineID, []dao.SelectedSession{{SessionID: sessionID, Day: 2}}); err != nil {
+	if err := repository.AddRoutineSessions(t.Context(), tx, userID, routineID, []routines.SelectedSession{{SessionID: sessionID, Day: 2}}); err != nil {
 		t.Fatal(err)
 	}
 	updatedRoutine, err := repository.GetRoutineTx(t.Context(), tx, userID, routineID)
@@ -311,12 +319,12 @@ func TestSessionDetailReadsOnlyCommittedSnapshots(t *testing.T) {
 	pool := integrationPool(t)
 	repository := New(pool)
 	userID := seedUser(t, pool, "snapshot")
-	first, _ := repository.CreateExercise(t.Context(), dao.CreateExerciseParams{UserID: userID, Name: "Primero"})
-	second, _ := repository.CreateExercise(t.Context(), dao.CreateExerciseParams{UserID: userID, Name: "Segundo"})
+	first, _ := repository.CreateExercise(t.Context(), routines.ExerciseWrite{UserID: userID, Name: "Primero"})
+	second, _ := repository.CreateExercise(t.Context(), routines.ExerciseWrite{UserID: userID, Name: "Segundo"})
 
 	seedTx, _ := repository.Begin(t.Context())
-	sessionID, _ := repository.CreateSession(t.Context(), seedTx, dao.CreateSessionParams{UserID: userID, Name: "Estado anterior"})
-	if err := repository.AddSessionExercises(t.Context(), seedTx, userID, sessionID, []dao.SelectedExercise{{ExerciseID: first.ID, Series: 1, Repetitions: 2, Order: 1}}); err != nil {
+	sessionID, _ := repository.CreateSession(t.Context(), seedTx, routines.SessionWrite{UserID: userID, Name: "Estado anterior"})
+	if err := repository.AddSessionExercises(t.Context(), seedTx, userID, sessionID, []routines.SelectedExercise{{ExerciseID: first.ID, Series: 1, Repetitions: 2, Order: 1}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := seedTx.Commit(t.Context()); err != nil {
@@ -327,13 +335,13 @@ func TestSessionDetailReadsOnlyCommittedSnapshots(t *testing.T) {
 	if err := repository.LockSession(t.Context(), writer, userID, sessionID); err != nil {
 		t.Fatal(err)
 	}
-	if err := repository.UpdateSessionFields(t.Context(), writer, userID, sessionID, dao.UpdateSessionParams{Name: "Estado nuevo"}); err != nil {
+	if err := repository.UpdateSessionFields(t.Context(), writer, userID, sessionID, routines.SessionWrite{Name: "Estado nuevo"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := repository.ClearSessionExercises(t.Context(), writer, userID, sessionID); err != nil {
 		t.Fatal(err)
 	}
-	if err := repository.AddSessionExercises(t.Context(), writer, userID, sessionID, []dao.SelectedExercise{{ExerciseID: second.ID, Series: 3, Repetitions: 4, Order: 1}}); err != nil {
+	if err := repository.AddSessionExercises(t.Context(), writer, userID, sessionID, []routines.SelectedExercise{{ExerciseID: second.ID, Series: 3, Repetitions: 4, Order: 1}}); err != nil {
 		t.Fatal(err)
 	}
 

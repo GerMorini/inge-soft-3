@@ -27,6 +27,8 @@ backend tests and 4 useful frontend tests. Documentation-only changes may state 
   `dao/` are optional and MUST appear only when the plan identifies concrete structures for them
 - **Backend tests**: beside tested Go packages unless plan.md records an existing simpler layout
 - **Frontend**: `frontend/src/` with tests in `frontend/tests/` or beside tested components
+- **Frontend styles**: keep specific CSS beside its component or feature; reserve the global
+  stylesheet for Tailwind/daisyUI integration, document-wide rules and shared palette tokens
 - Paths MUST follow the concrete structure selected in plan.md
 
 <!--
@@ -103,7 +105,8 @@ to mirror the conceptual data flow.
 - [ ] T016 [US1] Implement HTTP mapping in backend/internal/[module]/controller/[name].go
 - [ ] T017 [US1] Add validation and error handling
 - [ ] T018 [US1] Add logging for user story 1 operations
-- [ ] T019 [US1] Compose frontend with daisyUI components and minimal custom CSS
+- [ ] T019 [US1] Compose frontend with daisyUI, Tailwind utilities, the constitutional dark palette,
+      and any justified custom CSS localized beside the affected component or feature
 
 **Checkpoint**: At this point, User Story 1 should be fully functional and testable independently
 
@@ -162,6 +165,8 @@ to mirror the conceptual data flow.
 
 - [ ] TXXX [P] Documentation updates in docs/ when required
 - [ ] TXXX Verify daisyUI component reuse and remove unnecessary custom visual wrappers
+- [ ] TXXX Verify feature CSS remains local, global CSS contains no component-specific rules, and
+      semantic colors match the constitutional palette
 - [ ] TXXX Code cleanup and refactoring
 - [ ] TXXX Performance optimization across all stories
 - [ ] TXXX [P] Additional behavior tests needed to preserve backend/frontend minimums

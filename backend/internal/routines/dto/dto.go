@@ -39,9 +39,10 @@ type CreateSessionRequest struct {
 }
 
 type SessionSummary struct {
-	ID          int64   `json:"id"`
-	Name        string  `json:"name"`
-	Description *string `json:"description,omitempty"`
+	ID            int64   `json:"id"`
+	Name          string  `json:"name"`
+	Description   *string `json:"description,omitempty"`
+	ExerciseCount int64   `json:"exerciseCount"`
 }
 
 type SessionExercise struct {

@@ -154,7 +154,75 @@ composition while preserving its own series, repetitions, order or day. A concur
 the complete state before or after a commit, never a mixture. The final state after two successful
 PUT requests equals one complete submitted representation, never combined fields or associations.
 
+## Manual scenario 9: FitPro authentication shell
+
+1. Open the application without a token at 320 px and 1280 px widths.
+2. Verify the supplied gym image, dark left gradient, login card and absence of navbar.
+3. Activate `¿No tienes cuenta? Créate una aquí` by mouse and keyboard.
+4. Verify every registration field, both password visibility controls and the return-to-login link.
+5. Block the local image in browser tools or rename it in a temporary build and reload.
+6. Complete login with keyboard only.
+
+Expected result: login and registration swap in one surface, remain readable over the image and keep
+working against the dark fallback. The image is decorative. Lucide icons do not duplicate accessible
+names. No navbar exists before authentication.
+
+## Manual scenario 10: authenticated navigation and cards
+
+1. Verify FitPro and the dumbbell icon appear at navbar left.
+2. Navigate Rutinas, Sesiones and Ejercicios by click, Tab and arrow keys.
+3. Confirm each destination shows its title, description and gym-image hero.
+4. At 320, 768 and 1280 px, inspect empty, short and long card grids.
+5. Repeat at 200% zoom and confirm no horizontal overflow hides actions.
+6. Open two session cards and two exercise cards simultaneously by mouse and keyboard.
+7. Open a routine detail modal, expand two sibling sessions and one nested exercise.
+8. Open another sibling and confirm every previously opened sibling/nested item remains open.
+
+Expected result: selected navigation is conveyed by text/semantics, cards preserve separate actions,
+exercise counts are visible without per-card detail requests, disclosures remain independently open,
+details expose the requested hierarchy, and focus returns after modal close.
+
+## Manual scenario 11: wizard navigation and discard
+
+For exercise, session and routine wizards:
+
+1. Open Create and visit every step through the tabs while required fields are empty.
+2. Enter values, move backward and forward, and verify the draft remains.
+3. Click inside the dialog and confirm it remains open.
+4. Click the backdrop, reject discard, and verify active step and draft remain.
+5. Click the backdrop again, accept discard, and verify no POST/PUT occurs in Network.
+6. Open Edit, repeat with prefilled values, Escape, Close, Cancel and workspace navigation.
+7. On every non-final step, verify Save is absent and pressing Enter produces no POST/PUT.
+8. Open Summary, verify Save appears, submit and confirm no confirmation dialog appears.
+9. Confirm exactly one POST/PUT, zero follow-up GETs, closed wizard, updated card, visible success
+   announcement, logical focus and no automatically opened detail.
+10. Simulate a slow request and verify Save and dismissal cannot produce duplicate writes.
+11. Submit invalid data from Summary and verify focus moves to the first affected step.
+
+Expected result: steps never gate navigation, backdrop always warns, dirty exit behavior remains
+consistent, writes originate only from Summary, Save never warns, success uses the mutation response,
+pending state blocks closure/double submit, and rejected requests keep the complete draft.
+
+## Manual scenario 12: searchable selection and media
+
+1. In a session wizard, search exercises, select several, filter them out and clear the query.
+2. Reorder selections, enter zero and positive quantities, and inspect Summary.
+3. In a routine wizard, search a session and activate Add twice on the result that remains visible.
+4. Verify two independent rows, choose Monday and Thursday, then add it a third time and attempt a
+   duplicate Monday assignment.
+5. Open cards/details with valid image and direct-video URLs.
+6. Repeat with a YouTube/Vimeo page, broken, unsupported and slow URLs.
+7. Verify native controls, no autoplay/iframe, a permanently visible safe external link and textual
+   fallback after player error.
+8. Inspect Docker response CSP and outgoing media requests for permitted media directives and no
+   referrer.
+
+Expected result: search performs no API request, repeated assignment count includes every row, payload
+contains the same session ID with distinct days and no duplicate pair, media never autoplays, CSP
+permits requested previews, and all media states retain readable placeholders and safe links.
+
 ## Contract reference
 
 See [contracts/openapi.yaml](contracts/openapi.yaml) for exact request, response and error shapes.
+See [contracts/ui.md](contracts/ui.md) for wizard, cards, media, Lucide and accessibility behavior.
 See [data-model.md](data-model.md) for ownership, constraints and transaction boundaries.

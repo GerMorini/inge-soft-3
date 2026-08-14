@@ -56,6 +56,10 @@ compatible build integration for frontend; other dependencies require concrete j
       project minimum of 8 useful backend tests and 4 useful frontend tests.
 - [ ] Frontend uses daisyUI over Tailwind CSS, prefers existing components, and documents any custom
       CSS, theme, wrapper, or additional visual dependency that is genuinely required.
+- [ ] Component and feature styles remain local and traceable; global CSS contains only Tailwind/
+      daisyUI integration, document-wide foundations and shared design tokens.
+- [ ] Frontend design uses the constitutional dark palette with semantic primary, secondary, accent
+      and error roles; no feature introduces an alternative palette.
 - [ ] Every new dependency, abstraction, pattern, or infrastructure component solves a documented
       current requirement; otherwise it is omitted.
 - [ ] Build, test, and run workflows remain clear and locally reproducible.
@@ -99,7 +103,8 @@ frontend/
 ├── src/
 │   ├── components/
 │   ├── pages/
-│   └── styles.css          # Tailwind CSS + daisyUI entrypoint
+│   ├── <feature>/          # Feature components and any justified feature-local CSS
+│   └── styles.css          # Global entrypoint, document rules and design tokens only
 └── tests/
 ```
 

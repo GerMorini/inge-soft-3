@@ -1,51 +1,73 @@
-import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
-import { vi } from 'vitest'
-import App from './App'
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { vi } from "vitest";
+import App from "./App";
 
-function jsonResponse(body: unknown) {
-  return Promise.resolve(new Response(JSON.stringify(body), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  }))
-}
+const response = (body: unknown) =>
+  Promise.resolve(
+    new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
+const token = () =>
+  `header.${btoa(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 60 }))}.signature`;
 
-describe('App workspace navigation', () => {
+describe("FitPro shell", () => {
   beforeEach(() => {
-    sessionStorage.setItem('accessToken', browserToken(Date.now() + 60_000))
-    vi.restoreAllMocks()
-  })
-
-  it('keeps a dirty edit when discard is rejected and switches without PUT when accepted', async () => {
-    const routine = { id: 4, name: 'Semana', sessions: [] }
-    const fetchMock = vi.fn((input: RequestInfo | URL, _init?: RequestInit) => {
-      const path = String(input)
-      if (path === '/api/auth/me') return jsonResponse({ id: 1, username: 'ada' })
-      if (path === '/api/routines/4') return jsonResponse(routine)
-      if (path === '/api/routines') return jsonResponse([{ id: 4, name: 'Semana' }])
-      return jsonResponse([])
-    })
-    vi.stubGlobal('fetch', fetchMock)
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
-    const user = userEvent.setup()
-    render(<App />)
-
-    await user.click(await screen.findByRole('button', { name: 'Editar Semana' }))
-    const name = screen.getByLabelText('Nombre *')
-    await user.clear(name)
-    await user.type(name, 'Semana nueva')
-    await user.click(screen.getByRole('tab', { name: 'Sesiones' }))
-    expect(screen.getByRole('tab', { name: 'Rutinas' })).toHaveAttribute('aria-selected', 'true')
-    expect(name).toHaveValue('Semana nueva')
-
-    await user.click(screen.getByRole('tab', { name: 'Sesiones' }))
-    expect(await screen.findByText('Todavía no creaste sesiones.')).toBeInTheDocument()
-    expect(confirm).toHaveBeenCalledTimes(2)
-    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false)
-  })
-})
-
-function browserToken(expiresAt: number): string {
-  const payload = btoa(JSON.stringify({ exp: Math.floor(expiresAt / 1000) }))
-  return `header.${payload}.signature`
-}
+    sessionStorage.clear();
+    vi.restoreAllMocks();
+  });
+  it("starts at login and switches to complete registration without navbar", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    expect(
+      screen.getByRole("heading", { name: "Iniciar sesión" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("button", {
+        name: "¿No tienes cuenta? Créate una aquí",
+      }),
+    );
+    expect(screen.getByRole("form", { name: "Registro" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Confirmar contraseña")).toBeInTheDocument();
+  });
+  it("renders keyboard navigation and heroes after authentication", async () => {
+    sessionStorage.setItem("accessToken", token());
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) =>
+        String(input) === "/api/auth/me"
+          ? response({ id: 1, username: "ada" })
+          : response([]),
+      ),
+    );
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByText("FitPro")).toBeInTheDocument();
+    const navigation = screen.getByRole("navigation", {
+      name: "Navegación principal",
+    });
+    expect(
+      within(navigation).getByRole("group", {
+        name: "Controles de sesión",
+      }),
+    ).toHaveTextContent("ada");
+    expect(
+      within(navigation).getByRole("button", {
+        name: "Cerrar sesión de ada",
+      }),
+    ).toBeInTheDocument();
+    expect(within(navigation).getByRole("tablist")).toHaveClass(
+      "justify-self-center",
+    );
+    const routines = screen.getByRole("tab", { name: "Rutinas" });
+    routines.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByRole("tab", { name: "Sesiones" })).toHaveFocus();
+    expect(
+      await screen.findByRole("heading", { name: "Sesiones" }),
+    ).toBeInTheDocument();
+  });
+});

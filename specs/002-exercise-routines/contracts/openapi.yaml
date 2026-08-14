@@ -389,7 +389,7 @@ components:
     SessionSummary:
       type: object
       additionalProperties: false
-      required: [id, name]
+      required: [id, name, exerciseCount]
       properties:
         id:
           $ref: '#/components/schemas/ID'
@@ -397,6 +397,11 @@ components:
           $ref: '#/components/schemas/Name'
         description:
           $ref: '#/components/schemas/Description'
+        exerciseCount:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Number of exercises currently associated with the session.
     SessionExercise:
       type: object
       additionalProperties: false

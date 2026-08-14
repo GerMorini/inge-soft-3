@@ -5,6 +5,7 @@ import (
 	stderrors "errors"
 	"fmt"
 
+	routines "github.com/gmorini/inge-soft-3/backend/internal/routines"
 	"github.com/gmorini/inge-soft-3/backend/internal/routines/dao"
 	routineserrors "github.com/gmorini/inge-soft-3/backend/internal/routines/errors"
 	"github.com/jackc/pgx/v5"
@@ -56,21 +57,21 @@ func (r *Repository) Begin(ctx context.Context) (pgx.Tx, error) {
 	return tx, nil
 }
 
-func (r *Repository) CreateExercise(ctx context.Context, params dao.CreateExerciseParams) (dao.Exercise, error) {
+func (r *Repository) CreateExercise(ctx context.Context, params routines.ExerciseWrite) (routines.Exercise, error) {
 	const query = `
 		INSERT INTO exercises (user_id, name, description, image_url, video_url)
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, name, description, image_url, video_url`
-	var exercise dao.Exercise
+	var exercise routines.Exercise
 	err := r.db.QueryRow(ctx, query, params.UserID, params.Name, params.Description, params.ImageURL, params.VideoURL).
 		Scan(&exercise.ID, &exercise.Name, &exercise.Description, &exercise.ImageURL, &exercise.VideoURL)
 	if err != nil {
-		return dao.Exercise{}, fmt.Errorf("create exercise: %w", err)
+		return routines.Exercise{}, fmt.Errorf("create exercise: %w", err)
 	}
 	return exercise, nil
 }
 
-func (r *Repository) ListExercises(ctx context.Context, userID int64) ([]dao.Exercise, error) {
+func (r *Repository) ListExercises(ctx context.Context, userID int64) ([]routines.Exercise, error) {
 	const query = `
 		SELECT id, name, description, image_url, video_url
 		FROM exercises
@@ -82,9 +83,9 @@ func (r *Repository) ListExercises(ctx context.Context, userID int64) ([]dao.Exe
 	}
 	defer rows.Close()
 
-	exercises := make([]dao.Exercise, 0)
+	exercises := make([]routines.Exercise, 0)
 	for rows.Next() {
-		var exercise dao.Exercise
+		var exercise routines.Exercise
 		if err := rows.Scan(&exercise.ID, &exercise.Name, &exercise.Description, &exercise.ImageURL, &exercise.VideoURL); err != nil {
 			return nil, fmt.Errorf("scan exercise: %w", err)
 		}
@@ -96,37 +97,37 @@ func (r *Repository) ListExercises(ctx context.Context, userID int64) ([]dao.Exe
 	return exercises, nil
 }
 
-func (r *Repository) GetExercise(ctx context.Context, userID, exerciseID int64) (dao.Exercise, error) {
+func (r *Repository) GetExercise(ctx context.Context, userID, exerciseID int64) (routines.Exercise, error) {
 	const query = `
 		SELECT id, name, description, image_url, video_url
 		FROM exercises
 		WHERE user_id = $1 AND id = $2`
-	var exercise dao.Exercise
+	var exercise routines.Exercise
 	err := r.db.QueryRow(ctx, query, userID, exerciseID).
 		Scan(&exercise.ID, &exercise.Name, &exercise.Description, &exercise.ImageURL, &exercise.VideoURL)
 	if stderrors.Is(err, pgx.ErrNoRows) {
-		return dao.Exercise{}, routineserrors.ErrNotFound
+		return routines.Exercise{}, routineserrors.ErrNotFound
 	}
 	if err != nil {
-		return dao.Exercise{}, fmt.Errorf("get exercise: %w", err)
+		return routines.Exercise{}, fmt.Errorf("get exercise: %w", err)
 	}
 	return exercise, nil
 }
 
-func (r *Repository) UpdateExercise(ctx context.Context, userID, exerciseID int64, params dao.UpdateExerciseParams) (dao.Exercise, error) {
+func (r *Repository) UpdateExercise(ctx context.Context, userID, exerciseID int64, params routines.ExerciseWrite) (routines.Exercise, error) {
 	const query = `
 		UPDATE exercises
 		SET name = $3, description = $4, image_url = $5, video_url = $6
 		WHERE user_id = $1 AND id = $2
 		RETURNING id, name, description, image_url, video_url`
-	var exercise dao.Exercise
+	var exercise routines.Exercise
 	err := r.db.QueryRow(ctx, query, userID, exerciseID, params.Name, params.Description, params.ImageURL, params.VideoURL).
 		Scan(&exercise.ID, &exercise.Name, &exercise.Description, &exercise.ImageURL, &exercise.VideoURL)
 	if stderrors.Is(err, pgx.ErrNoRows) {
-		return dao.Exercise{}, routineserrors.ErrNotFound
+		return routines.Exercise{}, routineserrors.ErrNotFound
 	}
 	if err != nil {
-		return dao.Exercise{}, fmt.Errorf("update exercise: %w", err)
+		return routines.Exercise{}, fmt.Errorf("update exercise: %w", err)
 	}
 	return exercise, nil
 }
@@ -160,7 +161,7 @@ func (r *Repository) LockExercises(ctx context.Context, tx pgx.Tx, userID int64,
 	return found, nil
 }
 
-func (r *Repository) CreateSession(ctx context.Context, tx pgx.Tx, params dao.CreateSessionParams) (int64, error) {
+func (r *Repository) CreateSession(ctx context.Context, tx pgx.Tx, params routines.SessionWrite) (int64, error) {
 	const query = `
 		INSERT INTO workout_sessions (user_id, name, description)
 		VALUES ($1, $2, $3)
@@ -172,7 +173,7 @@ func (r *Repository) CreateSession(ctx context.Context, tx pgx.Tx, params dao.Cr
 	return id, nil
 }
 
-func (r *Repository) AddSessionExercises(ctx context.Context, tx pgx.Tx, userID, sessionID int64, selected []dao.SelectedExercise) error {
+func (r *Repository) AddSessionExercises(ctx context.Context, tx pgx.Tx, userID, sessionID int64, selected []routines.SelectedExercise) error {
 	const query = `
 		INSERT INTO session_exercises
 			(user_id, session_id, exercise_id, series_count, repetition_count, execution_order)
@@ -207,7 +208,7 @@ func (r *Repository) LockSession(ctx context.Context, tx pgx.Tx, userID, session
 	return nil
 }
 
-func (r *Repository) UpdateSessionFields(ctx context.Context, tx pgx.Tx, userID, sessionID int64, params dao.UpdateSessionParams) error {
+func (r *Repository) UpdateSessionFields(ctx context.Context, tx pgx.Tx, userID, sessionID int64, params routines.SessionWrite) error {
 	const query = `UPDATE workout_sessions SET name = $3, description = $4 WHERE user_id = $1 AND id = $2`
 	tag, err := tx.Exec(ctx, query, userID, sessionID, params.Name, params.Description)
 	if err != nil {
@@ -226,21 +227,24 @@ func (r *Repository) ClearSessionExercises(ctx context.Context, tx pgx.Tx, userI
 	return nil
 }
 
-func (r *Repository) ListSessions(ctx context.Context, userID int64) ([]dao.Session, error) {
+func (r *Repository) ListSessions(ctx context.Context, userID int64) ([]routines.SessionSummary, error) {
 	const query = `
-		SELECT id, name, description
-		FROM workout_sessions
-		WHERE user_id = $1
-		ORDER BY id`
+		SELECT s.id, s.name, s.description, COUNT(se.exercise_id)
+		FROM workout_sessions s
+		LEFT JOIN session_exercises se
+		  ON se.user_id = s.user_id AND se.session_id = s.id
+		WHERE s.user_id = $1
+		GROUP BY s.user_id, s.id, s.name, s.description
+		ORDER BY s.id`
 	rows, err := r.db.Query(ctx, query, userID)
 	if err != nil {
 		return nil, fmt.Errorf("list workout sessions: %w", err)
 	}
 	defer rows.Close()
-	sessions := make([]dao.Session, 0)
+	sessions := make([]routines.SessionSummary, 0)
 	for rows.Next() {
-		var session dao.Session
-		if err := rows.Scan(&session.ID, &session.Name, &session.Description); err != nil {
+		var session routines.SessionSummary
+		if err := rows.Scan(&session.ID, &session.Name, &session.Description, &session.ExerciseCount); err != nil {
 			return nil, fmt.Errorf("scan workout session: %w", err)
 		}
 		sessions = append(sessions, session)
@@ -251,25 +255,25 @@ func (r *Repository) ListSessions(ctx context.Context, userID int64) ([]dao.Sess
 	return sessions, nil
 }
 
-func (r *Repository) GetSession(ctx context.Context, userID, sessionID int64) (dao.Session, error) {
+func (r *Repository) GetSession(ctx context.Context, userID, sessionID int64) (routines.Session, error) {
 	rows, err := r.db.Query(ctx, sessionDetailQuery, userID, sessionID)
 	if err != nil {
-		return dao.Session{}, fmt.Errorf("get workout session: %w", err)
+		return routines.Session{}, fmt.Errorf("get workout session: %w", err)
 	}
 	return scanSessionDetail(rows)
 }
 
-func (r *Repository) GetSessionTx(ctx context.Context, tx pgx.Tx, userID, sessionID int64) (dao.Session, error) {
+func (r *Repository) GetSessionTx(ctx context.Context, tx pgx.Tx, userID, sessionID int64) (routines.Session, error) {
 	rows, err := tx.Query(ctx, sessionDetailQuery, userID, sessionID)
 	if err != nil {
-		return dao.Session{}, fmt.Errorf("get workout session in transaction: %w", err)
+		return routines.Session{}, fmt.Errorf("get workout session in transaction: %w", err)
 	}
 	return scanSessionDetail(rows)
 }
 
-func scanSessionDetail(rows pgx.Rows) (dao.Session, error) {
+func scanSessionDetail(rows pgx.Rows) (routines.Session, error) {
 	defer rows.Close()
-	var session dao.Session
+	var session routines.Session
 	seenParent := false
 	for rows.Next() {
 		var row dao.SessionDetailRow
@@ -278,24 +282,24 @@ func scanSessionDetail(rows pgx.Rows) (dao.Session, error) {
 			&row.ExerciseID, &row.ExerciseName, &row.ExerciseDescription,
 			&row.ImageURL, &row.VideoURL, &row.Series, &row.Repetitions, &row.Order,
 		); err != nil {
-			return dao.Session{}, fmt.Errorf("scan workout session detail: %w", err)
+			return routines.Session{}, fmt.Errorf("scan workout session detail: %w", err)
 		}
 		if !seenParent {
-			session = dao.Session{ID: row.SessionID, Name: row.SessionName, Description: row.SessionDescription, Exercises: make([]dao.SessionExercise, 0)}
+			session = routines.Session{ID: row.SessionID, Name: row.SessionName, Description: row.SessionDescription, Exercises: make([]routines.SessionExercise, 0)}
 			seenParent = true
 		}
 		if row.ExerciseID != nil {
-			session.Exercises = append(session.Exercises, dao.SessionExercise{
-				Exercise: dao.Exercise{ID: *row.ExerciseID, Name: *row.ExerciseName, Description: row.ExerciseDescription, ImageURL: row.ImageURL, VideoURL: row.VideoURL},
+			session.Exercises = append(session.Exercises, routines.SessionExercise{
+				Exercise: routines.Exercise{ID: *row.ExerciseID, Name: *row.ExerciseName, Description: row.ExerciseDescription, ImageURL: row.ImageURL, VideoURL: row.VideoURL},
 				Series:   *row.Series, Repetitions: *row.Repetitions, Order: *row.Order,
 			})
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return dao.Session{}, fmt.Errorf("iterate workout session detail: %w", err)
+		return routines.Session{}, fmt.Errorf("iterate workout session detail: %w", err)
 	}
 	if !seenParent {
-		return dao.Session{}, routineserrors.ErrNotFound
+		return routines.Session{}, routineserrors.ErrNotFound
 	}
 	return session, nil
 }
@@ -329,7 +333,7 @@ func (r *Repository) LockSessions(ctx context.Context, tx pgx.Tx, userID int64, 
 	return found, nil
 }
 
-func (r *Repository) CreateRoutine(ctx context.Context, tx pgx.Tx, params dao.CreateRoutineParams) (int64, error) {
+func (r *Repository) CreateRoutine(ctx context.Context, tx pgx.Tx, params routines.RoutineWrite) (int64, error) {
 	const query = `
 		INSERT INTO routines (user_id, name, description)
 		VALUES ($1, $2, $3)
@@ -341,7 +345,7 @@ func (r *Repository) CreateRoutine(ctx context.Context, tx pgx.Tx, params dao.Cr
 	return id, nil
 }
 
-func (r *Repository) AddRoutineSessions(ctx context.Context, tx pgx.Tx, userID, routineID int64, selected []dao.SelectedSession) error {
+func (r *Repository) AddRoutineSessions(ctx context.Context, tx pgx.Tx, userID, routineID int64, selected []routines.SelectedSession) error {
 	const query = `
 		INSERT INTO routine_sessions (user_id, routine_id, session_id, day_of_week)
 		VALUES ($1, $2, $3, $4)`
@@ -375,7 +379,7 @@ func (r *Repository) LockRoutine(ctx context.Context, tx pgx.Tx, userID, routine
 	return nil
 }
 
-func (r *Repository) UpdateRoutineFields(ctx context.Context, tx pgx.Tx, userID, routineID int64, params dao.UpdateRoutineParams) error {
+func (r *Repository) UpdateRoutineFields(ctx context.Context, tx pgx.Tx, userID, routineID int64, params routines.RoutineWrite) error {
 	const query = `UPDATE routines SET name = $3, description = $4 WHERE user_id = $1 AND id = $2`
 	tag, err := tx.Exec(ctx, query, userID, routineID, params.Name, params.Description)
 	if err != nil {
@@ -394,7 +398,7 @@ func (r *Repository) ClearRoutineSessions(ctx context.Context, tx pgx.Tx, userID
 	return nil
 }
 
-func (r *Repository) ListRoutines(ctx context.Context, userID int64) ([]dao.Routine, error) {
+func (r *Repository) ListRoutines(ctx context.Context, userID int64) ([]routines.Routine, error) {
 	const query = `
 		SELECT id, name, description
 		FROM routines
@@ -405,41 +409,41 @@ func (r *Repository) ListRoutines(ctx context.Context, userID int64) ([]dao.Rout
 		return nil, fmt.Errorf("list routines: %w", err)
 	}
 	defer rows.Close()
-	routines := make([]dao.Routine, 0)
+	items := make([]routines.Routine, 0)
 	for rows.Next() {
-		var routine dao.Routine
+		var routine routines.Routine
 		if err := rows.Scan(&routine.ID, &routine.Name, &routine.Description); err != nil {
 			return nil, fmt.Errorf("scan routine: %w", err)
 		}
-		routines = append(routines, routine)
+		items = append(items, routine)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("iterate routines: %w", err)
 	}
-	return routines, nil
+	return items, nil
 }
 
-func (r *Repository) GetRoutine(ctx context.Context, userID, routineID int64) (dao.Routine, error) {
+func (r *Repository) GetRoutine(ctx context.Context, userID, routineID int64) (routines.Routine, error) {
 	rows, err := r.db.Query(ctx, routineDetailQuery, userID, routineID)
 	if err != nil {
-		return dao.Routine{}, fmt.Errorf("get routine: %w", err)
+		return routines.Routine{}, fmt.Errorf("get routine: %w", err)
 	}
 	return scanRoutineDetail(rows)
 }
 
-func (r *Repository) GetRoutineTx(ctx context.Context, tx pgx.Tx, userID, routineID int64) (dao.Routine, error) {
+func (r *Repository) GetRoutineTx(ctx context.Context, tx pgx.Tx, userID, routineID int64) (routines.Routine, error) {
 	rows, err := tx.Query(ctx, routineDetailQuery, userID, routineID)
 	if err != nil {
-		return dao.Routine{}, fmt.Errorf("get routine in transaction: %w", err)
+		return routines.Routine{}, fmt.Errorf("get routine in transaction: %w", err)
 	}
 	return scanRoutineDetail(rows)
 }
 
-func scanRoutineDetail(rows pgx.Rows) (dao.Routine, error) {
+func scanRoutineDetail(rows pgx.Rows) (routines.Routine, error) {
 	defer rows.Close()
-	var routine dao.Routine
+	var routine routines.Routine
 	seenParent := false
-	var current *dao.RoutineSession
+	var current *routines.RoutineSession
 	for rows.Next() {
 		var row dao.RoutineDetailRow
 		if err := rows.Scan(
@@ -448,34 +452,34 @@ func scanRoutineDetail(rows pgx.Rows) (dao.Routine, error) {
 			&row.ExerciseID, &row.ExerciseName, &row.ExerciseDescription,
 			&row.ImageURL, &row.VideoURL, &row.Series, &row.Repetitions, &row.Order,
 		); err != nil {
-			return dao.Routine{}, fmt.Errorf("scan routine detail: %w", err)
+			return routines.Routine{}, fmt.Errorf("scan routine detail: %w", err)
 		}
 		if !seenParent {
-			routine = dao.Routine{ID: row.RoutineID, Name: row.RoutineName, Description: row.RoutineDescription, Sessions: make([]dao.RoutineSession, 0)}
+			routine = routines.Routine{ID: row.RoutineID, Name: row.RoutineName, Description: row.RoutineDescription, Sessions: make([]routines.RoutineSession, 0)}
 			seenParent = true
 		}
 		if row.SessionID == nil {
 			continue
 		}
 		if current == nil || current.Day != *row.Day || current.Session.ID != *row.SessionID {
-			routine.Sessions = append(routine.Sessions, dao.RoutineSession{
+			routine.Sessions = append(routine.Sessions, routines.RoutineSession{
 				Day:     *row.Day,
-				Session: dao.Session{ID: *row.SessionID, Name: *row.SessionName, Description: row.SessionDescription, Exercises: make([]dao.SessionExercise, 0)},
+				Session: routines.Session{ID: *row.SessionID, Name: *row.SessionName, Description: row.SessionDescription, Exercises: make([]routines.SessionExercise, 0)},
 			})
 			current = &routine.Sessions[len(routine.Sessions)-1]
 		}
 		if row.ExerciseID != nil {
-			current.Session.Exercises = append(current.Session.Exercises, dao.SessionExercise{
-				Exercise: dao.Exercise{ID: *row.ExerciseID, Name: *row.ExerciseName, Description: row.ExerciseDescription, ImageURL: row.ImageURL, VideoURL: row.VideoURL},
+			current.Session.Exercises = append(current.Session.Exercises, routines.SessionExercise{
+				Exercise: routines.Exercise{ID: *row.ExerciseID, Name: *row.ExerciseName, Description: row.ExerciseDescription, ImageURL: row.ImageURL, VideoURL: row.VideoURL},
 				Series:   *row.Series, Repetitions: *row.Repetitions, Order: *row.Order,
 			})
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return dao.Routine{}, fmt.Errorf("iterate routine detail: %w", err)
+		return routines.Routine{}, fmt.Errorf("iterate routine detail: %w", err)
 	}
 	if !seenParent {
-		return dao.Routine{}, routineserrors.ErrNotFound
+		return routines.Routine{}, routineserrors.ErrNotFound
 	}
 	return routine, nil
 }
