@@ -73,10 +73,33 @@
 				}
 			},
 			{
-				"label": "🔧 RECOMPILAR",
-				"detail": "Recompila todos los contenedores de docker",
+				"label": "🐳 Docker Compose: Levantar",
+				"detail": "Levanta todo el stack en segundo plano",
+				"type": "shell",
+				"command": "docker compose up -d",
+				"options": {
+					"cwd": "${workspaceFolder}"
+				},
+				"problemMatcher": []
+			},
+			{
+				"label": "🐳 Docker Compose: Detener",
+				"detail": "Detiene y elimina los contenedores sin borrar los volúmenes",
+				"type": "shell",
+				"command": "docker compose down",
+				"options": {
+					"cwd": "${workspaceFolder}"
+				},
+				"problemMatcher": []
+			},
+			{
+				"label": "🐳 Docker Compose: Recompilar",
+				"detail": "Reconstruye las imágenes y levanta todo el stack",
 				"type": "shell",
 				"command": "docker compose up -d --build",
+				"options": {
+					"cwd": "${workspaceFolder}"
+				},
 				"problemMatcher": []
 			},
 			{
