@@ -70,6 +70,45 @@ describe('App accessibility', () => {
       expect(result.violations).toEqual([])
     })
   })
+
+  it('keeps every prefilled edit mode accessible and moves focus to its heading', async () => {
+    const user = userEvent.setup()
+    sessionStorage.setItem('accessToken', browserToken(Date.now() + 60_000))
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const path = String(input)
+      const body = path === '/api/auth/me'
+        ? { id: 42, username: 'ada_01' }
+        : path === '/api/routines'
+          ? [{ id: 7, name: 'Semana A' }]
+          : path === '/api/routines/7'
+            ? { id: 7, name: 'Semana A', sessions: [] }
+            : path === '/api/sessions'
+              ? [{ id: 5, name: 'Piernas' }]
+              : path === '/api/sessions/5'
+                ? { id: 5, name: 'Piernas', exercises: [] }
+                : path === '/api/exercises'
+                  ? [{ id: 3, name: 'Sentadilla' }]
+                  : path === '/api/exercises/3'
+                    ? { id: 3, name: 'Sentadilla' }
+                    : []
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    })
+    const { container } = render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: 'Editar Semana A' }))
+    expect(screen.getByRole('heading', { name: 'Editar rutina' })).toHaveFocus()
+    expect((await axe.run(container, { rules: { 'color-contrast': { enabled: false } } })).violations).toEqual([])
+
+    await user.click(screen.getByRole('tab', { name: 'Sesiones' }))
+    await user.click(await screen.findByRole('button', { name: 'Editar Piernas' }))
+    expect(screen.getByRole('heading', { name: 'Editar sesión' })).toHaveFocus()
+    expect((await axe.run(container, { rules: { 'color-contrast': { enabled: false } } })).violations).toEqual([])
+
+    await user.click(screen.getByRole('tab', { name: 'Ejercicios' }))
+    await user.click(await screen.findByRole('button', { name: 'Editar Sentadilla' }))
+    expect(screen.getByRole('heading', { name: 'Editar ejercicio' })).toHaveFocus()
+    expect((await axe.run(container, { rules: { 'color-contrast': { enabled: false } } })).violations).toEqual([])
+  })
 })
 
 function browserToken(expiresAt: number): string {

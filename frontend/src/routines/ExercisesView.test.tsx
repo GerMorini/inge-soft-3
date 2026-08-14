@@ -71,4 +71,41 @@ describe('ExercisesView', () => {
     await waitFor(() => expect(onUnauthenticated).toHaveBeenCalled())
     expect(sessionStorage.getItem('accessToken')).toBeNull()
   })
+
+  it('prefills editing, protects a dirty draft and sends complete PUT data', async () => {
+    const exercise = { id: 9, name: 'Remo', description: 'Con barra', imageUrl: 'https://example.com/remo' }
+    const updated = { id: 9, name: 'Remo sentado' }
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input)
+      if (init?.method === 'PUT') return jsonResponse(updated)
+      if (path === '/api/exercises/9') return jsonResponse(exercise)
+      return jsonResponse([exercise])
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    const dirty = vi.fn()
+    const user = userEvent.setup()
+    render(<ExercisesView onUnauthenticated={vi.fn()} onDirtyChange={dirty} />)
+
+    await user.click(await screen.findByRole('button', { name: 'Editar Remo' }))
+    expect(screen.getByRole('form', { name: 'Editar ejercicio' })).toBeInTheDocument()
+    const name = screen.getByLabelText('Nombre *')
+    expect(name).toHaveValue('Remo')
+    await user.clear(name)
+    await user.type(name, 'Remo sentado')
+    await user.clear(screen.getByLabelText('Descripción'))
+    await user.clear(screen.getByLabelText('URL de imagen'))
+    await user.click(screen.getByRole('button', { name: 'Cancelar edición' }))
+    expect(confirm).toHaveBeenCalled()
+    expect(name).toHaveValue('Remo sentado')
+
+    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+    expect(await screen.findByText('Ejercicio Remo sentado actualizado.')).toBeInTheDocument()
+    const request = fetchMock.mock.calls.find(([, init]) => init?.method === 'PUT')
+    expect(String(request?.[0])).toBe('/api/exercises/9')
+    expect(JSON.parse(String(request?.[1]?.body))).toEqual({
+      name: 'Remo sentado', description: '', imageUrl: '', videoUrl: '',
+    })
+    expect(dirty).toHaveBeenCalledWith(true)
+  })
 })

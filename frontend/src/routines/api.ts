@@ -53,6 +53,9 @@ export const getExercise = (id: number, onUnauthorized?: UnauthorizedHandler) =>
 export const createExercise = (input: ExerciseInput, onUnauthorized?: UnauthorizedHandler) =>
   authorizedRequest<Exercise>('/api/exercises', { method: 'POST', body: JSON.stringify(input) }, onUnauthorized)
 
+export const updateExercise = (id: number, input: ExerciseInput, onUnauthorized?: UnauthorizedHandler) =>
+  authorizedRequest<Exercise>(`/api/exercises/${id}`, { method: 'PUT', body: JSON.stringify(input) }, onUnauthorized)
+
 export const deleteExercise = (id: number, onUnauthorized?: UnauthorizedHandler) =>
   authorizedRequest<void>(`/api/exercises/${id}`, { method: 'DELETE' }, onUnauthorized)
 
@@ -65,6 +68,9 @@ export const getSession = (id: number, onUnauthorized?: UnauthorizedHandler) =>
 export const createSession = (input: SessionInput, onUnauthorized?: UnauthorizedHandler) =>
   authorizedRequest<SessionDetail>('/api/sessions', { method: 'POST', body: JSON.stringify(input) }, onUnauthorized)
 
+export const updateSession = (id: number, input: SessionInput, onUnauthorized?: UnauthorizedHandler) =>
+  authorizedRequest<SessionDetail>(`/api/sessions/${id}`, { method: 'PUT', body: JSON.stringify(input) }, onUnauthorized)
+
 export const deleteSession = (id: number, onUnauthorized?: UnauthorizedHandler) =>
   authorizedRequest<void>(`/api/sessions/${id}`, { method: 'DELETE' }, onUnauthorized)
 
@@ -76,6 +82,9 @@ export const getRoutine = (id: number, onUnauthorized?: UnauthorizedHandler) =>
 
 export const createRoutine = (input: RoutineInput, onUnauthorized?: UnauthorizedHandler) =>
   authorizedRequest<RoutineDetail>('/api/routines', { method: 'POST', body: JSON.stringify(input) }, onUnauthorized)
+
+export const updateRoutine = (id: number, input: RoutineInput, onUnauthorized?: UnauthorizedHandler) =>
+  authorizedRequest<RoutineDetail>(`/api/routines/${id}`, { method: 'PUT', body: JSON.stringify(input) }, onUnauthorized)
 
 export const deleteRoutine = (id: number, onUnauthorized?: UnauthorizedHandler) =>
   authorizedRequest<void>(`/api/routines/${id}`, { method: 'DELETE' }, onUnauthorized)

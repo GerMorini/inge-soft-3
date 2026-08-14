@@ -205,6 +205,151 @@ func TestSessionRoutinePersistenceAndCascades(t *testing.T) {
 	}
 }
 
+func TestUpdatePrimitivesAndFlatDetails(t *testing.T) {
+	pool := integrationPool(t)
+	repository := New(pool)
+	userID := seedUser(t, pool, "updates")
+	first, err := repository.CreateExercise(t.Context(), dao.CreateExerciseParams{UserID: userID, Name: "Remo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, _ := repository.CreateExercise(t.Context(), dao.CreateExerciseParams{UserID: userID, Name: "Plancha"})
+	description := "Actualizado"
+	updatedExercise, err := repository.UpdateExercise(t.Context(), userID, first.ID, dao.UpdateExerciseParams{Name: "Remo sentado", Description: &description})
+	if err != nil || updatedExercise.ID != first.ID || updatedExercise.Name != "Remo sentado" {
+		t.Fatalf("updated exercise = %+v, %v", updatedExercise, err)
+	}
+
+	tx, _ := repository.Begin(t.Context())
+	sessionID, _ := repository.CreateSession(t.Context(), tx, dao.CreateSessionParams{UserID: userID, Name: "Vacía"})
+	if err := tx.Commit(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	emptySession, err := repository.GetSession(t.Context(), userID, sessionID)
+	if err != nil || len(emptySession.Exercises) != 0 {
+		t.Fatalf("empty session = %+v, %v", emptySession, err)
+	}
+
+	tx, _ = repository.Begin(t.Context())
+	exists, err := repository.SessionExists(t.Context(), tx, userID, sessionID)
+	if err != nil || !exists {
+		t.Fatalf("session exists = %v, %v", exists, err)
+	}
+	found, err := repository.LockExercises(t.Context(), tx, userID, []int64{first.ID, second.ID})
+	if err != nil || len(found) != 2 {
+		t.Fatalf("locked exercises = %v, %v", found, err)
+	}
+	if err := repository.LockSession(t.Context(), tx, userID, sessionID); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.UpdateSessionFields(t.Context(), tx, userID, sessionID, dao.UpdateSessionParams{Name: "Fuerza", Description: &description}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.ClearSessionExercises(t.Context(), tx, userID, sessionID); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.AddSessionExercises(t.Context(), tx, userID, sessionID, []dao.SelectedExercise{
+		{ExerciseID: second.ID, Series: 4, Repetitions: 20, Order: 1},
+		{ExerciseID: first.ID, Series: 3, Repetitions: 8, Order: 2},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	updatedSession, err := repository.GetSessionTx(t.Context(), tx, userID, sessionID)
+	if err != nil || len(updatedSession.Exercises) != 2 || updatedSession.Exercises[0].Exercise.ID != second.ID {
+		t.Fatalf("updated session = %+v, %v", updatedSession, err)
+	}
+	if err := tx.Commit(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	tx, _ = repository.Begin(t.Context())
+	routineID, _ := repository.CreateRoutine(t.Context(), tx, dao.CreateRoutineParams{UserID: userID, Name: "Vacía"})
+	if err := tx.Commit(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	emptyRoutine, err := repository.GetRoutine(t.Context(), userID, routineID)
+	if err != nil || len(emptyRoutine.Sessions) != 0 {
+		t.Fatalf("empty routine = %+v, %v", emptyRoutine, err)
+	}
+
+	tx, _ = repository.Begin(t.Context())
+	exists, err = repository.RoutineExists(t.Context(), tx, userID, routineID)
+	if err != nil || !exists {
+		t.Fatalf("routine exists = %v, %v", exists, err)
+	}
+	found, err = repository.LockSessions(t.Context(), tx, userID, []int64{sessionID})
+	if err != nil || len(found) != 1 {
+		t.Fatalf("locked sessions = %v, %v", found, err)
+	}
+	if err := repository.LockRoutine(t.Context(), tx, userID, routineID); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.UpdateRoutineFields(t.Context(), tx, userID, routineID, dao.UpdateRoutineParams{Name: "Semana"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.ClearRoutineSessions(t.Context(), tx, userID, routineID); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.AddRoutineSessions(t.Context(), tx, userID, routineID, []dao.SelectedSession{{SessionID: sessionID, Day: 2}}); err != nil {
+		t.Fatal(err)
+	}
+	updatedRoutine, err := repository.GetRoutineTx(t.Context(), tx, userID, routineID)
+	if err != nil || len(updatedRoutine.Sessions) != 1 || updatedRoutine.Sessions[0].Session.Name != "Fuerza" {
+		t.Fatalf("updated routine = %+v, %v", updatedRoutine, err)
+	}
+	if err := tx.Commit(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	propagated, err := repository.GetRoutine(t.Context(), userID, routineID)
+	if err != nil || propagated.Sessions[0].Session.Exercises[1].Exercise.Name != "Remo sentado" {
+		t.Fatalf("propagated routine = %+v, %v", propagated, err)
+	}
+}
+
+func TestSessionDetailReadsOnlyCommittedSnapshots(t *testing.T) {
+	pool := integrationPool(t)
+	repository := New(pool)
+	userID := seedUser(t, pool, "snapshot")
+	first, _ := repository.CreateExercise(t.Context(), dao.CreateExerciseParams{UserID: userID, Name: "Primero"})
+	second, _ := repository.CreateExercise(t.Context(), dao.CreateExerciseParams{UserID: userID, Name: "Segundo"})
+
+	seedTx, _ := repository.Begin(t.Context())
+	sessionID, _ := repository.CreateSession(t.Context(), seedTx, dao.CreateSessionParams{UserID: userID, Name: "Estado anterior"})
+	if err := repository.AddSessionExercises(t.Context(), seedTx, userID, sessionID, []dao.SelectedExercise{{ExerciseID: first.ID, Series: 1, Repetitions: 2, Order: 1}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := seedTx.Commit(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+
+	writer, _ := repository.Begin(t.Context())
+	if err := repository.LockSession(t.Context(), writer, userID, sessionID); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.UpdateSessionFields(t.Context(), writer, userID, sessionID, dao.UpdateSessionParams{Name: "Estado nuevo"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.ClearSessionExercises(t.Context(), writer, userID, sessionID); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.AddSessionExercises(t.Context(), writer, userID, sessionID, []dao.SelectedExercise{{ExerciseID: second.ID, Series: 3, Repetitions: 4, Order: 1}}); err != nil {
+		t.Fatal(err)
+	}
+
+	beforeCommit, err := repository.GetSession(t.Context(), userID, sessionID)
+	if err != nil || beforeCommit.Name != "Estado anterior" || len(beforeCommit.Exercises) != 1 || beforeCommit.Exercises[0].Exercise.ID != first.ID {
+		t.Fatalf("detail during update = %+v, %v", beforeCommit, err)
+	}
+	if err := writer.Commit(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	afterCommit, err := repository.GetSession(t.Context(), userID, sessionID)
+	if err != nil || afterCommit.Name != "Estado nuevo" || len(afterCommit.Exercises) != 1 || afterCommit.Exercises[0].Exercise.ID != second.ID {
+		t.Fatalf("detail after update = %+v, %v", afterCommit, err)
+	}
+}
+
 func deleteExerciseAndCompact(t *testing.T, repository *Repository, userID, exerciseID int64) {
 	t.Helper()
 	tx, err := repository.Begin(t.Context())

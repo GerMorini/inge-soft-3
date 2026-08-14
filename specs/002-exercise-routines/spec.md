@@ -6,7 +6,7 @@
 
 **Status**: Draft
 
-**Input**: User description: "Añadir creación, consulta y eliminación de ejercicios, sesiones y
+**Input**: User description: "Añadir creación, consulta, edición y eliminación de ejercicios, sesiones y
 rutinas privadas por usuario. Las rutinas seleccionan sesiones existentes y asignan a cada una un
 día de la semana; las sesiones seleccionan ejercicios existentes y asignan series y repeticiones.
 Cada ejercicio seleccionado también tiene un orden de ejecución dentro de su sesión. Todas las
@@ -26,6 +26,18 @@ operaciones requieren autenticación."
   en días diferentes, pero no más de una vez en el mismo día.
 - Q: ¿Qué ocurre con el orden cuando se elimina un ejercicio usado en sesiones? → A: Cada sesión
   afectada renumera automáticamente sus ejercicios restantes desde 1.
+- Q: ¿Qué ocurre en los contenedores cuando se edita un ejercicio o sesión reutilizada? → A: Todas
+  las sesiones y rutinas muestran inmediatamente los datos actualizados.
+- Q: Si una actualización contiene varios problemas, ¿qué prioridad tienen los errores? → A:
+  Primero se valida la estructura, después la existencia del recurso objetivo y finalmente las
+  referencias seleccionadas.
+- Q: ¿Qué consistencia tiene una consulta detallada durante una edición concurrente? → A: Cada
+  respuesta representa un único estado confirmado, sin mezclar datos anteriores y nuevos.
+- Q: ¿Qué ocurre al abandonar una edición con cambios sin guardar? → A: La interfaz solicita
+  confirmación antes de descartarlos.
+- Q: ¿Qué resultado produce un identificador inválido? → A: Texto no numérico, cero, negativos o
+  valores fuera del rango admitido producen una solicitud inválida; únicamente identificadores
+  válidos ajenos o inexistentes producen un resultado de recurso no encontrado.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -137,6 +149,44 @@ eliminar una entidad ajena y confirma que no obtiene información ni produce cam
 4. **Given** un ejercicio utilizado en una o más sesiones, **When** la persona lo elimina, **Then**
    cada sesión afectada conserva sus ejercicios restantes renumerados consecutivamente desde 1.
 
+---
+
+### User Story 5 - Editar contenido propio (Priority: P5)
+
+Una persona autenticada modifica ejercicios, sesiones y rutinas ya creados sin cambiar su identidad
+ni propietario. La edición de una sesión o rutina reemplaza su composición completa.
+
+**Why this priority**: Permite corregir y mantener contenido reutilizable después de crearlo, sin
+agregar historial, versionado ni edición parcial compleja.
+
+**Independent Test**: La persona abre cada entidad propia, entra en edición, modifica sus campos y
+asociaciones, guarda y comprueba el detalle completo actualizado; cancelar no persiste cambios.
+
+**Acceptance Scenarios**:
+
+1. **Given** un ejercicio propio, **When** la persona edita sus campos y elimina valores opcionales,
+   **Then** conserva el mismo identificador y muestra únicamente los nuevos valores.
+2. **Given** una sesión propia, **When** cambia nombre, descripción, cantidades, ejercicios u orden
+   y guarda, **Then** la composición completa anterior se reemplaza atómicamente por la nueva.
+3. **Given** una rutina propia, **When** cambia nombre, descripción, sesiones o días y guarda,
+   **Then** las asignaciones anteriores se reemplazan atómicamente por las nuevas.
+4. **Given** una sesión o rutina propia, **When** guarda una lista vacía, **Then** la entidad se
+   conserva sin asociaciones.
+5. **Given** una entidad ajena o inexistente, **When** intenta editarla, **Then** el sistema no revela
+   su existencia ni modifica datos.
+6. **Given** una referencia seleccionada que es ajena, inexistente o dejó de estar disponible,
+   **When** confirma la edición, **Then** falla toda la operación y permanece el estado anterior.
+7. **Given** un formulario de edición con cambios sin guardar, **When** la persona cancela, **Then**
+   no se envía una actualización y la entidad persistida permanece intacta.
+8. **Given** un ejercicio o sesión reutilizada, **When** la persona guarda su edición, **Then** todas
+   las sesiones o rutinas que la referencian muestran inmediatamente sus datos actualizados.
+9. **Given** una actualización estructuralmente válida cuyo objetivo no existe o es ajeno y además
+   contiene referencias no disponibles, **When** se procesa, **Then** responde como recurso no
+   encontrado sin informar primero errores sobre las referencias internas.
+10. **Given** una edición con cambios sin guardar, **When** la persona cancela o intenta cambiar de
+    apartado, **Then** la interfaz solicita confirmación y conserva la edición si no acepta el
+    descarte.
+
 ### Edge Cases
 
 - Una rutina o sesión se crea sin elementos seleccionados.
@@ -158,35 +208,46 @@ eliminar una entidad ajena y confirma que no obtiene información ni produce cam
 - Una descripción opcional se omite o se envía vacía.
 - Una URL opcional se omite, usa una dirección relativa o emplea un esquema distinto de HTTP/HTTPS.
 - Una entidad seleccionada se elimina o deja de pertenecer al usuario antes de confirmar la
-  creación del elemento que la referencia.
+  creación o edición del elemento que la referencia.
+- Una edición elimina todos los ejercicios de una sesión o todas las sesiones de una rutina.
+- Una edición elimina una descripción o URL opcional previamente guardada.
+- Dos ediciones concurrentes del mismo recurso terminan en uno de los estados completos enviados,
+  sin mezclar parcialmente sus asociaciones.
+- Una consulta detallada coincide con un único estado confirmado aunque una edición concurrente
+  modifique campos o asociaciones durante la lectura.
+- La persona cancela después de reordenar o quitar elementos en el formulario de edición.
+- La persona intenta cambiar de apartado con una edición modificada y rechaza el descarte.
 - Se elimina el primer ejercicio, uno intermedio o el último de una sesión con varios ejercicios.
 - Se solicita una entidad con un identificador inexistente o perteneciente a otra cuenta.
+- Se usa como identificador texto no numérico, cero, un negativo o un entero fuera del
+  rango admitido.
 - Dos usuarios crean entidades con el mismo nombre; no existe una regla de unicidad global.
 
 ## Scope Boundaries *(mandatory)*
 
-- **In scope**: Crear, listar, consultar en detalle y eliminar ejercicios, sesiones y rutinas
-  propios; seleccionar ejercicios existentes al crear sesiones; seleccionar sesiones existentes y
-  asignar días al crear rutinas; validar textos, URLs, enteros y pertenencia; mostrar en la interfaz
-  solamente contenido de la persona autenticada.
-- **Out of scope**: Editar entidades existentes, duplicarlas, compartirlas, publicarlas, usar
+- **In scope**: Crear, listar, consultar en detalle, editar mediante reemplazo completo y eliminar
+  ejercicios, sesiones y rutinas propios; seleccionar ejercicios existentes al crear o editar
+  sesiones; seleccionar sesiones existentes y asignar días al crear o editar rutinas; validar
+  textos, URLs, enteros y pertenencia; mostrar solamente contenido de la persona autenticada.
+- **Out of scope**: Edición parcial por campos, historial o resolución interactiva de conflictos,
+  duplicar entidades, compartirlas, publicarlas, usar
   plantillas, registrar ejecución o progreso, controlar pesos o descansos, ordenar elementos
   fuera del flujo de creación, buscar, filtrar, paginar, adjuntar archivos y administrar permisos
   adicionales.
 - **Simplicity rationale**: La feature incorpora únicamente tres catálogos privados y sus
-  asociaciones necesarias. Reutiliza la autenticación existente y no agrega colaboración,
-  historial ni capacidades anticipadas.
+  asociaciones necesarias. La edición reemplaza formularios completos y reutiliza las mismas
+  validaciones, evitando contratos parciales, historial o capacidades anticipadas.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: Toda creación, listado, consulta detallada y eliminación de rutinas, sesiones o
+- **FR-001**: Toda creación, listado, consulta detallada, edición y eliminación de rutinas, sesiones o
   ejercicios DEBE requerir una persona autenticada.
 - **FR-002**: Cada rutina, sesión y ejercicio DEBE pertenecer exactamente a la cuenta que lo creó.
 - **FR-003**: El sistema DEBE limitar cada listado a entidades pertenecientes a la persona
   autenticada.
-- **FR-004**: El sistema NO DEBE permitir consultar, eliminar ni seleccionar una entidad de otra
+- **FR-004**: El sistema NO DEBE permitir consultar, editar, eliminar ni seleccionar una entidad de otra
   cuenta mediante su identificador.
 - **FR-005**: Una entidad ajena y una inexistente DEBEN producir resultados públicamente
   indistinguibles para evitar revelar su existencia.
@@ -223,7 +284,7 @@ eliminar una entidad ajena y confirma que no obtiene información ni produce cam
 - **FR-020**: Las URLs de imagen y video, cuando se informen, DEBEN ser URLs absolutas válidas con
   esquema HTTP o HTTPS y NO DEBEN contener espacios.
 - **FR-021**: El sistema DEBE informar todos los campos y asociaciones inválidos detectables en un
-  intento de creación.
+  intento de creación o edición.
 - **FR-022**: El apartado de rutinas DEBE mostrar las rutinas propias y permitir abrir el detalle
   completo de cada una, incluyendo descripción, días, sesiones, ejercicios, series, repeticiones y
   orden de ejecución, además de las URLs opcionales.
@@ -243,9 +304,39 @@ eliminar una entidad ajena y confirma que no obtiene información ni produce cam
 - **FR-029**: Los nombres NO DEBEN ser únicos; una misma cuenta y cuentas distintas PUEDEN tener
   entidades con nombres iguales.
 - **FR-030**: Una entidad seleccionada DEBE seguir perteneciendo al usuario al momento de confirmar
-  la creación, aunque el catálogo mostrado se haya cargado anteriormente.
+  la creación o edición, aunque el catálogo mostrado se haya cargado anteriormente.
 - **FR-031**: Una misma sesión PUEDE aparecer varias veces en una rutina solamente cuando cada
   aparición tenga un día diferente; la combinación de rutina, sesión y día NO DEBE repetirse.
+- **FR-032**: La persona autenticada DEBE poder editar únicamente ejercicios, sesiones y rutinas
+  propios, conservando el identificador y propietario originales.
+- **FR-033**: Editar un ejercicio DEBE reemplazar su nombre, descripción y URLs opcionales usando
+  las mismas validaciones aplicadas durante la creación.
+- **FR-034**: Editar una sesión DEBE reemplazar su nombre, descripción y conjunto completo de
+  ejercicios, incluyendo series, repeticiones y orden, como una única operación atómica.
+- **FR-035**: Editar una rutina DEBE reemplazar su nombre, descripción y conjunto completo de
+  asignaciones sesión/día como una única operación atómica.
+- **FR-036**: Una lista vacía durante la edición DEBE retirar todas las asociaciones y conservar la
+  sesión o rutina; los campos opcionales omitidos o vacíos DEBEN eliminar su valor anterior.
+- **FR-037**: La interfaz DEBE precargar la representación actual al iniciar una edición, permitir
+  guardar o cancelar y conservar los valores ingresados cuando la actualización sea rechazada.
+- **FR-038**: Cancelar o abandonar una edición con cambios sin guardar DEBE solicitar confirmación;
+  al confirmar, NO DEBE enviar una actualización ni modificar datos persistidos, y al rechazar DEBE
+  conservar el formulario y permanecer en la edición.
+- **FR-039**: Una actualización concurrente DEBE producir una representación completa confirmada,
+  nunca una mezcla parcial; no se requiere detectar ni resolver conflictos entre escritores.
+- **FR-040**: Las asociaciones DEBEN conservar referencias reutilizables: editar un ejercicio o
+  sesión DEBE reflejar sus datos actualizados en todos los detalles de sesiones o rutinas que lo
+  incluyan, sin crear copias históricas ni bloquear la edición por estar en uso.
+- **FR-041**: Una actualización DEBE aplicar esta prioridad de errores: estructura y reglas
+  detectables sin persistencia, existencia y pertenencia del recurso objetivo, y disponibilidad de
+  referencias seleccionadas. Un objetivo ajeno o inexistente DEBE informarse como recurso no
+  encontrado antes de informar referencias internas no disponibles.
+- **FR-042**: Cada consulta detallada de sesión o rutina DEBE representar un único estado confirmado;
+  NO DEBE combinar campos o asociaciones pertenecientes a estados anteriores y posteriores de una
+  edición concurrente.
+- **FR-043**: Un identificador no numérico, no positivo o fuera del rango entero admitido DEBE
+  producir un resultado de solicitud inválida; un identificador positivo válido ajeno o inexistente
+  DEBE producir el mismo resultado de recurso no encontrado sin revelar cuál caso ocurrió.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -296,8 +387,34 @@ eliminar una entidad ajena y confirma que no obtiene información ni produce cam
   acciones de entidades ajenas.
 - **TB-018 Frontend**: Ante autenticación ausente o vencida, no muestra información privada y vuelve
   al flujo no autenticado existente.
+- **TB-019 Backend**: Edita un ejercicio propio, permite limpiar opcionales y mantiene el mismo
+  identificador; una entidad ajena o inexistente produce el mismo resultado público.
+- **TB-020 Backend**: Reemplaza atómicamente la composición completa de una sesión, admite vaciarla
+  y conserva el estado anterior cuando una referencia o asociación es inválida.
+- **TB-021 Backend**: Reemplaza atómicamente las asignaciones completas de una rutina, admite
+  vaciarla y conserva el estado anterior ante cualquier fallo.
+- **TB-022 Backend**: Dos reemplazos concurrentes dejan uno de los estados completos y no mezclan
+  campos o asociaciones.
+- **TB-023 Frontend**: Precarga y guarda la edición de ejercicios, actualizando listado y detalle
+  con la respuesta completa del servidor.
+- **TB-024 Frontend**: Precarga sesiones y rutinas, permite agregar, quitar y reordenar asociaciones,
+  y envía la representación completa.
+- **TB-025 Frontend**: Cancelar o abandonar una edición modificada solicita confirmación; aceptarla
+  no realiza una actualización y restaura el modo de creación, mientras rechazarla conserva el
+  formulario y apartado actuales.
+- **TB-026 Frontend**: Un rechazo conserva los valores editados, muestra errores accesibles y evita
+  envíos duplicados; un `401` vuelve al flujo no autenticado.
+- **TB-027 Backend**: Editar un ejercicio o sesión reutilizada actualiza los detalles anidados de
+  todos sus contenedores sin cambiar los valores propios de cada asociación.
+- **TB-028 Backend**: Una actualización con objetivo ausente o ajeno y referencias no disponibles
+  informa primero que el recurso no fue encontrado y no revela el estado de esas referencias.
+- **TB-029 Backend**: Una consulta detallada concurrente con una actualización devuelve íntegramente
+  el estado confirmado anterior o el posterior, nunca una combinación de ambos.
+- **TB-030 Backend**: Consulta, edición y eliminación distinguen identificadores inválidos como
+  solicitudes inválidas, mientras identificadores válidos ajenos o inexistentes comparten el mismo
+  resultado de recurso no encontrado.
 
-Esta feature agrega 12 comportamientos útiles de backend y 6 de frontend, además de reutilizar las
+Esta feature define 20 comportamientos útiles de backend y 10 de frontend, además de reutilizar las
 pruebas de autenticación existentes.
 
 ## Success Criteria *(mandatory)*
@@ -320,6 +437,16 @@ pruebas de autenticación existentes.
   dependientes y renumeran las sesiones afectadas sin alterar contenido ajeno.
 - **SC-008**: Una sesión o ejercicio reutilizado conserva correctamente sus valores particulares en
   el 100% de las rutinas o sesiones donde aparece.
+- **SC-009**: Una persona puede editar un ejercicio en menos de 1 minuto, una sesión en menos de 2
+  minutos y una rutina en menos de 3 minutos, partiendo de sus valores actuales.
+- **SC-010**: El 100% de las actualizaciones exitosas conserva identificador y propietario y muestra
+  el detalle completo actualizado.
+- **SC-011**: El 100% de las actualizaciones rechazadas conserva íntegramente el estado persistido
+  anterior, sin campos ni asociaciones parciales.
+- **SC-012**: El 100% de las cancelaciones probadas termina sin solicitudes de actualización ni
+  cambios persistidos.
+- **SC-013**: El 100% de las consultas detalladas probadas bajo edición concurrente representa un
+  único estado confirmado sin mezclar campos o asociaciones de estados distintos.
 
 ## Assumptions
 
@@ -341,3 +468,9 @@ pruebas de autenticación existentes.
   de negocio innecesarias.
 - El orden de ejercicios es explícito dentro de cada sesión; el orden de sesiones dentro de una
   rutina se determina por su día asignado.
+- La edición reemplaza la representación editable completa; no admite actualización parcial ni
+  edición anidada de ejercicios dentro de sesiones o de sesiones dentro de rutinas.
+- Las listas `exercises` y `sessions` son obligatorias en una actualización y pueden enviarse
+  vacías. Los campos opcionales omitidos o vacíos equivalen a ausencia.
+- Las ediciones concurrentes usan una política simple de última transacción confirmada; no se
+  incorporan versiones, ETags, historial ni resolución de conflictos.

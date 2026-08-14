@@ -1,10 +1,11 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { ApiError } from '../auth/types'
-import { createSession, deleteSession, getSession, listExercises, listSessions } from './api'
+import { createSession, deleteSession, getSession, listExercises, listSessions, updateSession } from './api'
 import type { Exercise, FieldErrors, SessionDetail, SessionSummary } from './types'
 
 interface SessionsViewProps {
   onUnauthenticated: () => void
+  onDirtyChange?: (dirty: boolean) => void
 }
 
 interface SelectedExerciseRow {
@@ -13,17 +14,37 @@ interface SelectedExerciseRow {
   repetitions: number
 }
 
-export function SessionsView({ onUnauthenticated }: SessionsViewProps) {
+const emptySessionForm = { name: '', description: '' }
+
+export function SessionsView({ onUnauthenticated, onDirtyChange }: SessionsViewProps) {
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [selected, setSelected] = useState<SessionDetail | null>(null)
   const [composition, setComposition] = useState<SelectedExerciseRow[]>([])
   const [exerciseID, setExerciseID] = useState('')
-  const [form, setForm] = useState({ name: '', description: '' })
+  const [form, setForm] = useState(emptySessionForm)
   const [fields, setFields] = useState<FieldErrors>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [editingID, setEditingID] = useState<number | null>(null)
+  const [baseline, setBaseline] = useState('')
+  const [saving, setSaving] = useState(false)
+  const formTitleRef = useRef<HTMLHeadingElement>(null)
+  const errorRef = useRef<HTMLParagraphElement>(null)
+  const draft = useMemo(() => JSON.stringify({
+    ...form,
+    exercises: composition.map((item) => ({
+      exerciseId: item.exercise.id,
+      series: item.series,
+      repetitions: item.repetitions,
+    })),
+  }), [composition, form])
+  const dirty = editingID !== null && draft !== baseline
+
+  useEffect(() => { onDirtyChange?.(dirty) }, [dirty, onDirtyChange])
+  useEffect(() => { if (editingID !== null) formTitleRef.current?.focus() }, [editingID])
+  useEffect(() => { if (error) errorRef.current?.focus() }, [error])
 
   async function load() {
     setLoading(true)
@@ -87,8 +108,9 @@ export function SessionsView({ onUnauthenticated }: SessionsViewProps) {
     }
     setFields({})
     setError('')
+    setSaving(true)
     try {
-      const created = await createSession({
+      const input = {
         ...form,
         exercises: composition.map((item, index) => ({
           exerciseId: item.exercise.id,
@@ -96,16 +118,68 @@ export function SessionsView({ onUnauthenticated }: SessionsViewProps) {
           repetitions: item.repetitions,
           order: index + 1,
         })),
-      }, onUnauthenticated)
-      setSessions((current) => [...current, created].sort((a, b) => a.id - b.id))
-      setSelected(created)
+      }
+      const saved = editingID === null
+        ? await createSession(input, onUnauthenticated)
+        : await updateSession(editingID, input, onUnauthenticated)
+      setSessions((current) => editingID === null
+        ? [...current, saved].sort((a, b) => a.id - b.id)
+        : current.map((item) => item.id === saved.id ? saved : item))
+      setSelected(saved)
       setComposition([])
-      setForm({ name: '', description: '' })
-      setMessage(`Sesión ${created.name} creada.`)
+      setForm(emptySessionForm)
+      setEditingID(null)
+      setBaseline('')
+      setMessage(`Sesión ${saved.name} ${editingID === null ? 'creada' : 'actualizada'}.`)
     } catch (reason) {
       if (reason instanceof ApiError) setFields(reason.body.fields ?? {})
       if (!(reason instanceof ApiError && reason.status === 401)) setError(reason instanceof Error ? reason.message : 'No se pudo crear la sesión.')
+    } finally {
+      setSaving(false)
     }
+  }
+
+  async function edit(id: number) {
+    setError('')
+    setMessage('')
+    try {
+      const session = await getSession(id, onUnauthenticated)
+      const nextForm = { name: session.name, description: session.description ?? '' }
+      const nextComposition = session.exercises.map((item) => ({
+        exercise: item.exercise,
+        series: item.series,
+        repetitions: item.repetitions,
+      }))
+      setSelected(session)
+      setForm(nextForm)
+      setComposition(nextComposition)
+      setEditingID(session.id)
+      setBaseline(JSON.stringify({
+        ...nextForm,
+        exercises: nextComposition.map((item) => ({
+          exerciseId: item.exercise.id,
+          series: item.series,
+          repetitions: item.repetitions,
+        })),
+      }))
+      setFields({})
+    } catch (reason) {
+      if (!(reason instanceof ApiError && reason.status === 401)) setError('La sesión ya no está disponible.')
+    }
+  }
+
+  function resetEdit() {
+    setEditingID(null)
+    setBaseline('')
+    setForm(emptySessionForm)
+    setComposition([])
+    setFields({})
+    setError('')
+  }
+
+  function cancelEdit() {
+    if (dirty && !window.confirm('Tenés cambios sin guardar. ¿Querés descartarlos?')) return
+    resetEdit()
   }
 
   async function inspect(id: number) {
@@ -122,6 +196,7 @@ export function SessionsView({ onUnauthenticated }: SessionsViewProps) {
     setError('')
     try {
       await deleteSession(session.id, onUnauthenticated)
+      if (editingID === session.id) resetEdit()
       setSessions((current) => current.filter((item) => item.id !== session.id))
       setSelected((current) => current?.id === session.id ? null : current)
       setMessage(`Sesión ${session.name} eliminada.`)
@@ -134,11 +209,11 @@ export function SessionsView({ onUnauthenticated }: SessionsViewProps) {
     <section aria-labelledby="sessions-title" className="space-y-6">
       <h2 className="text-2xl font-bold" id="sessions-title">Sesiones</h2>
       {message && <p className="alert alert-success" role="status">{message}</p>}
-      {error && <p className="alert alert-error" role="alert" tabIndex={-1}>{error}</p>}
+      {error && <p className="alert alert-error" ref={errorRef} role="alert" tabIndex={-1}>{error}</p>}
 
-      <form aria-label="Crear sesión" className="card bg-base-200" onSubmit={submit} noValidate>
+      <form aria-label={editingID === null ? 'Crear sesión' : 'Editar sesión'} className="card bg-base-200" onSubmit={submit} noValidate>
         <div className="card-body gap-4">
-          <h3 className="card-title">Crear sesión</h3>
+          <h3 className="card-title" ref={formTitleRef} tabIndex={-1}>{editingID === null ? 'Crear sesión' : 'Editar sesión'}</h3>
           <label className="fieldset">
             <span className="fieldset-legend">Nombre *</span>
             <input className={`input w-full ${fields.name ? 'input-error' : ''}`} value={form.name} required aria-invalid={fields.name ? 'true' : undefined} aria-describedby={fields.name ? 'session-name-error' : undefined} onChange={(event) => setForm({ ...form, name: event.target.value })} />
@@ -187,7 +262,10 @@ export function SessionsView({ onUnauthenticated }: SessionsViewProps) {
               </ol>
             )}
           </fieldset>
-          <button className="btn btn-primary" type="submit">Crear sesión</button>
+          <div className="flex flex-wrap gap-2">
+            <button className="btn btn-primary" disabled={saving} type="submit">{saving ? 'Guardando cambios…' : editingID === null ? 'Crear sesión' : 'Guardar cambios'}</button>
+            {editingID !== null && <button className="btn btn-secondary" disabled={saving} type="button" onClick={cancelEdit}>Cancelar edición</button>}
+          </div>
         </div>
       </form>
 
@@ -202,6 +280,7 @@ export function SessionsView({ onUnauthenticated }: SessionsViewProps) {
                   {session.description && <p>{session.description}</p>}
                   <div className="card-actions">
                     <button className="btn btn-sm" type="button" onClick={() => void inspect(session.id)}>Ver {session.name}</button>
+                    <button className="btn btn-secondary btn-sm" type="button" onClick={() => void edit(session.id)}>Editar {session.name}</button>
                     <button className="btn btn-error btn-sm" type="button" onClick={() => void remove(session)}>Eliminar {session.name}</button>
                   </div>
                 </div>

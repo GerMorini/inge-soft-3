@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Exercise Routines API
   version: 1.0.0
-  description: Authenticated private exercises, workout sessions and routines for spec 002.
+  description: Authenticated create, read, replace and delete operations for private training data.
 servers:
   - url: /
 security:
@@ -62,6 +62,31 @@ paths:
                 $ref: '#/components/schemas/Exercise'
         '400':
           $ref: '#/components/responses/InvalidPath'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      operationId: updateExercise
+      summary: Replace all editable fields of one owned exercise
+      description: Pure request validation precedes the owned-target lookup.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExerciseRequest'
+      responses:
+        '200':
+          description: Complete updated exercise
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Exercise'
+        '400':
+          $ref: '#/components/responses/InvalidInput'
         '401':
           $ref: '#/components/responses/InvalidToken'
         '404':
@@ -142,6 +167,33 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+    put:
+      operationId: updateWorkoutSession
+      summary: Replace one owned session and its complete ordered exercise composition
+      description: >-
+        Pure request validation runs first. A missing or foreign target returns not_found before
+        unavailable selected exercises are reported.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSessionRequest'
+      responses:
+        '200':
+          description: Complete updated session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionDetail'
+        '400':
+          $ref: '#/components/responses/InvalidInput'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
     delete:
       operationId: deleteWorkoutSession
       summary: Delete one owned session and remove its routine assignments
@@ -216,6 +268,33 @@ paths:
           $ref: '#/components/responses/NotFound'
         '500':
           $ref: '#/components/responses/InternalError'
+    put:
+      operationId: updateRoutine
+      summary: Replace one owned routine and its complete session assignments
+      description: >-
+        Pure request validation runs first. A missing or foreign target returns not_found before
+        unavailable selected sessions are reported.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoutineRequest'
+      responses:
+        '200':
+          description: Complete updated routine
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoutineDetail'
+        '400':
+          $ref: '#/components/responses/InvalidInput'
+        '401':
+          $ref: '#/components/responses/InvalidToken'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
     delete:
       operationId: deleteRoutine
       summary: Delete one owned routine and preserve reusable sessions and exercises
@@ -250,6 +329,7 @@ components:
     CreateExerciseRequest:
       type: object
       additionalProperties: false
+      description: Complete writable exercise representation, reused by POST and PUT.
       required: [name]
       properties:
         name:
@@ -278,6 +358,7 @@ components:
     CreateSessionRequest:
       type: object
       additionalProperties: false
+      description: Complete writable session representation, reused by POST and PUT.
       required: [name, exercises]
       properties:
         name:
@@ -350,6 +431,7 @@ components:
     CreateRoutineRequest:
       type: object
       additionalProperties: false
+      description: Complete writable routine representation, reused by POST and PUT.
       required: [name, sessions]
       properties:
         name:
@@ -469,7 +551,9 @@ components:
           $ref: '#/components/schemas/ErrorBody'
   responses:
     InvalidInput:
-      description: Malformed request or one or more invalid fields/associations
+      description: >-
+        Malformed request or one or more invalid fields/associations. Structural and pure field
+        validation precedes target and selected-reference lookups.
       content:
         application/json:
           schema:

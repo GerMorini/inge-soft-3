@@ -13,9 +13,22 @@ type WorkspaceView = typeof workspaceViews[number]
 export default function App() {
   const [authView, setAuthView] = useState<'register' | 'login'>('register')
   const [workspaceView, setWorkspaceView] = useState<WorkspaceView>('routines')
+  const [workspaceDirty, setWorkspaceDirty] = useState(false)
   const [authenticated, setAuthenticated] = useState(() => readAccessToken() !== null)
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([])
-  const unauthenticate = useCallback(() => setAuthenticated(false), [])
+  const unauthenticate = useCallback(() => {
+    setWorkspaceDirty(false)
+    setAuthenticated(false)
+  }, [])
+  const handleDirtyChange = useCallback((dirty: boolean) => setWorkspaceDirty(dirty), [])
+
+  function changeWorkspace(nextView: WorkspaceView) {
+    if (nextView === workspaceView) return true
+    if (workspaceDirty && !window.confirm('Tenés cambios sin guardar. ¿Querés descartarlos?')) return false
+    setWorkspaceDirty(false)
+    setWorkspaceView(nextView)
+    return true
+  }
 
   // Flechas recorren pestañas sin añadir paradas redundantes al orden Tab.
   // WCAG 2.2 - 2.1.1 Keyboard, 4.1.2 Name, Role, Value.
@@ -27,13 +40,12 @@ export default function App() {
     else if (event.key === 'End') nextIndex = workspaceViews.length - 1
     else return
     event.preventDefault()
-    setWorkspaceView(workspaceViews[nextIndex])
-    tabRefs.current[nextIndex]?.focus()
+    if (changeWorkspace(workspaceViews[nextIndex])) tabRefs.current[nextIndex]?.focus()
   }
 
   return (
     <main className="min-h-screen bg-base-200 px-4 py-10">
-      <a className="skip-link" href="#workspace-content">Saltar al contenido</a>
+      <a className="fixed left-4 top-4 z-50 -translate-y-[200%] rounded-lg bg-base-content px-4 py-3 text-base-100 focus:translate-y-0" href="#workspace-content">Saltar al contenido</a>
       <section className="card mx-auto max-w-6xl bg-base-100 shadow-xl" aria-labelledby="page-title">
         <div className="card-body pb-0">
           <p className="text-sm font-semibold text-primary">Aplicación académica</p>
@@ -58,7 +70,7 @@ export default function App() {
                       className={`tab ${workspaceView === item ? 'tab-active' : ''}`}
                       id={`tab-${item}`}
                       key={item}
-                      onClick={() => setWorkspaceView(item)}
+                      onClick={(event) => { if (!changeWorkspace(item)) event.preventDefault() }}
                       onKeyDown={(event) => handleTabKey(event, index)}
                       ref={(element) => { tabRefs.current[index] = element }}
                       role="tab"
@@ -71,9 +83,9 @@ export default function App() {
             </nav>
             <div id="workspace-content">
               <div aria-labelledby={`tab-${workspaceView}`} id={`panel-${workspaceView}`} role="tabpanel" tabIndex={0}>
-                {workspaceView === 'routines' && <RoutinesView onUnauthenticated={unauthenticate} />}
-                {workspaceView === 'sessions' && <SessionsView onUnauthenticated={unauthenticate} />}
-                {workspaceView === 'exercises' && <ExercisesView onUnauthenticated={unauthenticate} />}
+                {workspaceView === 'routines' && <RoutinesView onUnauthenticated={unauthenticate} onDirtyChange={handleDirtyChange} />}
+                {workspaceView === 'sessions' && <SessionsView onUnauthenticated={unauthenticate} onDirtyChange={handleDirtyChange} />}
+                {workspaceView === 'exercises' && <ExercisesView onUnauthenticated={unauthenticate} onDirtyChange={handleDirtyChange} />}
               </div>
             </div>
           </SessionStatus>

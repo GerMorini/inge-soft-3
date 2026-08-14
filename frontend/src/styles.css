@@ -1,25 +1,35 @@
 @import "tailwindcss";
 @plugin "daisyui";
+@plugin "daisyui/theme" {
+  name: "academic-dark";
+  default: true;
+  prefersdark: true;
+  color-scheme: "dark";
+  --color-base-100: #252728;
+  --color-base-200: #1c1d1e;
+  --color-base-300: #343637;
+  --color-base-content: #f4f4f5;
+  --color-primary: #b6ff57;
+  --color-primary-content: #1c1d1e;
+  --color-secondary: #5d58f3;
+  --color-secondary-content: #ffffff;
+  --color-accent: #ff7cff;
+  --color-accent-content: #1c1d1e;
+  --color-neutral: #252728;
+  --color-neutral-content: #f4f4f5;
+  --color-info: #5d58f3;
+  --color-info-content: #ffffff;
+  --color-success: #b6ff57;
+  --color-success-content: #1c1d1e;
+  --color-warning: #ee0000;
+  --color-warning-content: #ffffff;
+  --color-error: #ee0000;
+  --color-error-content: #ffffff;
+}
 
 body {
   min-width: 320px;
   min-height: 100vh;
-}
-
-.skip-link {
-  position: fixed;
-  left: 1rem;
-  top: 1rem;
-  z-index: 50;
-  transform: translateY(-200%);
-  border-radius: 0.5rem;
-  background: var(--color-base-content);
-  color: var(--color-base-100);
-  padding: 0.75rem 1rem;
-}
-
-.skip-link:focus {
-  transform: translateY(0);
 }
 
 :focus-visible {

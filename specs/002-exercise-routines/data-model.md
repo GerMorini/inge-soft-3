@@ -4,7 +4,8 @@
 
 The feature adds three user-owned reusable entities and two associations. PostgreSQL 18.4 is the
 selected engine. The model uses native relational constraints, no extensions and no JSON. Its write
-surface is normal application DML; service controls transactions for composite use cases.
+surface is normal application DML; service controls transactions for composite use cases. Editing
+reuses this schema and requires no additional migration.
 
 ## Logical model
 
@@ -57,8 +58,8 @@ Primary key: `(user_id, id)`. A session may have zero associated exercises.
 
 Primary key `(user_id, session_id, exercise_id)` prevents exercise duplication. A named,
 deferrable unique constraint on `(user_id, session_id, execution_order)` protects order uniqueness.
-Consecutiveness `1..N` is validated by service on creation and restored transactionally after an
-exercise deletion.
+Consecutiveness `1..N` is validated by service on creation and replacement, and restored
+transactionally after an exercise deletion.
 
 ## Entity: Routine
 
@@ -133,6 +134,54 @@ Use the same pattern, locking selected workout sessions before inserting routine
 Duplicate `(session_id, day_of_week)` pairs fail validation before persistence and remain protected
 by the primary key.
 
+### Update exercise
+
+Execute one `UPDATE ... WHERE user_id = $1 AND id = $2 RETURNING ...`. Zero rows maps to the same
+result for absent and foreign resources. Empty optional values persist as `NULL`. Associations keep
+the same exercise ID and expose its new values in subsequent nested details.
+
+### Replace session
+
+1. Validate the complete input before opening a transaction.
+2. Probe the tenant-owned target without locking; absence returns not found before child inspection.
+3. Lock selected tenant-owned exercises with `FOR KEY SHARE`, ordered by ID, retaining any missing
+   result internally.
+4. Lock and recheck the target tenant-owned session with `FOR UPDATE`.
+5. If target disappeared return not found; otherwise report missing children only after target
+   confirmation.
+6. Update fields, delete prior `session_exercises` rows and insert the complete new set.
+7. Read canonical detail through one joined statement inside the transaction, then commit; any
+   failure restores all previous fields and associations.
+
+The required association array may be empty. Delete-before-insert avoids diff logic and conflicts
+with prior execution orders.
+
+### Replace routine
+
+1. Validate the complete input before opening a transaction.
+2. Probe the tenant-owned target without a lock.
+3. Lock selected tenant-owned sessions with `FOR KEY SHARE`, ordered by ID, retaining missing IDs.
+4. Lock and recheck the target tenant-owned routine with `FOR UPDATE`.
+5. Resolve disappearing target before selected-session errors, replace fields and associations,
+   read the joined detail inside the transaction, then commit.
+
+All writers follow lock order exercise, workout session, routine, with ascending IDs inside each
+group. Default `READ COMMITTED` is sufficient. Concurrent replacements use the last committed
+complete state and do not require version columns.
+
+### Read consistent detail
+
+- Session detail uses one statement from `workout_sessions` through `LEFT JOIN session_exercises`
+  and `LEFT JOIN exercises`, ordered by execution order.
+- Routine detail uses one statement from `routines` through both associations and reusable entities,
+  ordered by day, session ID and exercise order.
+- `LEFT JOIN` keeps one nullable parent row for an empty container. Repository aggregates rows by
+  session assignment `(session_id, day)` where necessary.
+- One PostgreSQL statement observes one committed MVCC snapshot under `READ COMMITTED`; no read
+  transaction is required and a detail cannot mix states around a concurrent commit.
+- Association tables store no copied descriptive data. Joined reads propagate committed exercise
+  or session edits to every containing detail while preserving association-specific values.
+
 ### Delete routine or session
 
 A scoped `DELETE WHERE user_id = $1 AND id = $2` is one atomic statement. Foreign-key cascades
@@ -164,6 +213,11 @@ and foreign entities.
 | BR-009 | URLs are absolute HTTP/HTTPS | URL columns | COMPARTIDA | CAP_CHECK_CONSTRAINT | basic scheme/whitespace CHECK | Go URL parser is semantic authority |
 | BR-010 | Composite changes are atomic | several tables | COMPARTIDA | transaction | PostgreSQL transaction/cascade | Service owns begin/commit/rollback |
 | BR-011 | Foreign and absent IDs are indistinguishable | no extra state | APLICACIÓN | NOT_APPLICABLE | tenant-scoped no-row result | Controller maps one public error |
+| BR-012 | Session/routine edits replace all associations atomically | parent and association rows | COMPARTIDA | transaction | row locks, DELETE and INSERT before commit | Service validates and owns transaction |
+| BR-013 | Editing preserves resource ID and owner | composite parent key | BDD | CAP_PRIMARY_KEY | scoped UPDATE never changes key | DTO omits ID and user ID |
+| BR-014 | Missing target takes priority over unavailable selected children | no extra state | APLICACIÓN | NOT_APPLICABLE | scoped probe and target recheck | Service delays child error classification |
+| BR-015 | Each nested detail represents one committed state | joined rows | BDD | transaction snapshot | one SQL statement under READ COMMITTED | Repository aggregates one result set |
+| BR-016 | Reusable edits propagate to all containers | normalized foreign keys | BDD | CAP_FOREIGN_KEY | joins read current referenced rows | No snapshot copies or fan-out updates |
 
 ## Capability resolution
 
@@ -171,7 +225,7 @@ PostgreSQL 18.4 natively supplies all selected database capabilities: NOT NULL, 
 composite primary/foreign keys, deferrable unique constraints, DML transactions, row locks,
 `ON DELETE CASCADE` and window functions. No extension, stored routine, trigger, RLS policy or
 accepted degradation is required. Integration tests must prove the effective schema behavior on the
-project's PostgreSQL 18.4 test container.
+project's PostgreSQL 18.4 test container. Updates need no migration beyond migration 002.
 
 ## Excluded persistence
 

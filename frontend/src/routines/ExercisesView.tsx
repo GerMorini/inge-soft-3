@@ -1,11 +1,14 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { ApiError } from '../auth/types'
-import { createExercise, deleteExercise, getExercise, listExercises } from './api'
+import { createExercise, deleteExercise, getExercise, listExercises, updateExercise } from './api'
 import type { Exercise, FieldErrors } from './types'
 
 interface ExercisesViewProps {
   onUnauthenticated: () => void
+  onDirtyChange?: (dirty: boolean) => void
 }
+
+const emptyExerciseForm = { name: '', description: '', imageUrl: '', videoUrl: '' }
 
 function validateText(value: string, maximum: number, required: boolean): string[] {
   const errors: string[] = []
@@ -29,14 +32,24 @@ function validateURL(value: string): string[] {
   return []
 }
 
-export function ExercisesView({ onUnauthenticated }: ExercisesViewProps) {
+export function ExercisesView({ onUnauthenticated, onDirtyChange }: ExercisesViewProps) {
   const [exercises, setExercises] = useState<Exercise[]>([])
   const [selected, setSelected] = useState<Exercise | null>(null)
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [fields, setFields] = useState<FieldErrors>({})
-  const [form, setForm] = useState({ name: '', description: '', imageUrl: '', videoUrl: '' })
+  const [form, setForm] = useState(emptyExerciseForm)
+  const [editingID, setEditingID] = useState<number | null>(null)
+  const [baseline, setBaseline] = useState('')
+  const [saving, setSaving] = useState(false)
+  const formTitleRef = useRef<HTMLHeadingElement>(null)
+  const errorRef = useRef<HTMLParagraphElement>(null)
+  const dirty = useMemo(() => editingID !== null && JSON.stringify(form) !== baseline, [baseline, editingID, form])
+
+  useEffect(() => { onDirtyChange?.(dirty) }, [dirty, onDirtyChange])
+  useEffect(() => { if (editingID !== null) formTitleRef.current?.focus() }, [editingID])
+  useEffect(() => { if (error) errorRef.current?.focus() }, [error])
 
   async function load() {
     setLoading(true)
@@ -68,16 +81,55 @@ export function ExercisesView({ onUnauthenticated }: ExercisesViewProps) {
     }
     setError('')
     setFields({})
+    setSaving(true)
     try {
-      const created = await createExercise(form, onUnauthenticated)
-      setExercises((current) => [...current, created].sort((a, b) => a.id - b.id))
-      setSelected(created)
-      setForm({ name: '', description: '', imageUrl: '', videoUrl: '' })
-      setMessage(`Ejercicio ${created.name} creado.`)
+      const saved = editingID === null
+        ? await createExercise(form, onUnauthenticated)
+        : await updateExercise(editingID, form, onUnauthenticated)
+      setExercises((current) => editingID === null
+        ? [...current, saved].sort((a, b) => a.id - b.id)
+        : current.map((item) => item.id === saved.id ? saved : item))
+      setSelected(saved)
+      setForm(emptyExerciseForm)
+      setEditingID(null)
+      setBaseline('')
+      setMessage(`Ejercicio ${saved.name} ${editingID === null ? 'creado' : 'actualizado'}.`)
     } catch (reason) {
       if (reason instanceof ApiError) setFields(reason.body.fields ?? {})
       if (!(reason instanceof ApiError && reason.status === 401)) setError(reason instanceof Error ? reason.message : 'No se pudo crear el ejercicio.')
+    } finally {
+      setSaving(false)
     }
+  }
+
+  async function edit(id: number) {
+    setError('')
+    setMessage('')
+    try {
+      const exercise = await getExercise(id, onUnauthenticated)
+      const draft = {
+        name: exercise.name,
+        description: exercise.description ?? '',
+        imageUrl: exercise.imageUrl ?? '',
+        videoUrl: exercise.videoUrl ?? '',
+      }
+      setSelected(exercise)
+      setForm(draft)
+      setEditingID(exercise.id)
+      setBaseline(JSON.stringify(draft))
+      setFields({})
+    } catch (reason) {
+      if (!(reason instanceof ApiError && reason.status === 401)) setError('El ejercicio ya no está disponible.')
+    }
+  }
+
+  function cancelEdit() {
+    if (dirty && !window.confirm('Tenés cambios sin guardar. ¿Querés descartarlos?')) return
+    setEditingID(null)
+    setBaseline('')
+    setForm(emptyExerciseForm)
+    setFields({})
+    setError('')
   }
 
   async function inspect(id: number) {
@@ -94,6 +146,12 @@ export function ExercisesView({ onUnauthenticated }: ExercisesViewProps) {
     setError('')
     try {
       await deleteExercise(exercise.id, onUnauthenticated)
+      if (editingID === exercise.id) {
+        setEditingID(null)
+        setBaseline('')
+        setForm(emptyExerciseForm)
+        setFields({})
+      }
       setSelected((current) => current?.id === exercise.id ? null : current)
       setExercises((current) => current.filter((item) => item.id !== exercise.id))
       setMessage(`Ejercicio ${exercise.name} eliminado.`)
@@ -106,16 +164,19 @@ export function ExercisesView({ onUnauthenticated }: ExercisesViewProps) {
     <section aria-labelledby="exercises-title" className="space-y-6">
       <h2 className="text-2xl font-bold" id="exercises-title">Ejercicios</h2>
       {message && <p className="alert alert-success" role="status">{message}</p>}
-      {error && <p className="alert alert-error" role="alert" tabIndex={-1}>{error}</p>}
+      {error && <p className="alert alert-error" ref={errorRef} role="alert" tabIndex={-1}>{error}</p>}
 
-      <form aria-label="Crear ejercicio" className="card bg-base-200" onSubmit={submit} noValidate>
+      <form aria-label={editingID === null ? 'Crear ejercicio' : 'Editar ejercicio'} className="card bg-base-200" onSubmit={submit} noValidate>
         <div className="card-body grid gap-4 md:grid-cols-2">
-          <h3 className="card-title md:col-span-2">Crear ejercicio</h3>
+          <h3 className="card-title md:col-span-2" ref={formTitleRef} tabIndex={-1}>{editingID === null ? 'Crear ejercicio' : 'Editar ejercicio'}</h3>
           <Field label="Nombre" name="exercise-name" value={form.name} errors={fields.name} required onChange={(name) => setForm({ ...form, name })} />
           <Field label="Descripción" name="exercise-description" value={form.description} errors={fields.description} onChange={(description) => setForm({ ...form, description })} />
           <Field label="URL de imagen" name="exercise-image-url" value={form.imageUrl} errors={fields.imageUrl} inputMode="url" onChange={(imageUrl) => setForm({ ...form, imageUrl })} />
           <Field label="URL de video" name="exercise-video-url" value={form.videoUrl} errors={fields.videoUrl} inputMode="url" onChange={(videoUrl) => setForm({ ...form, videoUrl })} />
-          <button className="btn btn-primary md:col-span-2" type="submit">Crear ejercicio</button>
+          <div className="flex flex-wrap gap-2 md:col-span-2">
+            <button className="btn btn-primary" disabled={saving} type="submit">{saving ? 'Guardando cambios…' : editingID === null ? 'Crear ejercicio' : 'Guardar cambios'}</button>
+            {editingID !== null && <button className="btn btn-secondary" disabled={saving} type="button" onClick={cancelEdit}>Cancelar edición</button>}
+          </div>
         </div>
       </form>
 
@@ -132,6 +193,7 @@ export function ExercisesView({ onUnauthenticated }: ExercisesViewProps) {
                   {exercise.description && <p>{exercise.description}</p>}
                   <div className="card-actions">
                     <button className="btn btn-sm" type="button" onClick={() => void inspect(exercise.id)}>Ver {exercise.name}</button>
+                    <button className="btn btn-secondary btn-sm" type="button" onClick={() => void edit(exercise.id)}>Editar {exercise.name}</button>
                     <button className="btn btn-error btn-sm" type="button" onClick={() => void remove(exercise)}>Eliminar {exercise.name}</button>
                   </div>
                 </div>
@@ -147,8 +209,8 @@ export function ExercisesView({ onUnauthenticated }: ExercisesViewProps) {
             <h3 className="card-title" id="exercise-detail-title">Detalle: {selected.name}</h3>
             {selected.description && <p>{selected.description}</p>}
             <div className="flex flex-wrap gap-3">
-              {selected.imageUrl && <a className="link link-primary" href={selected.imageUrl} target="_blank" rel="noreferrer">Abrir imagen de {selected.name}</a>}
-              {selected.videoUrl && <a className="link link-primary" href={selected.videoUrl} target="_blank" rel="noreferrer">Abrir video de {selected.name}</a>}
+              {selected.imageUrl && <a className="link link-secondary" href={selected.imageUrl} target="_blank" rel="noreferrer">Abrir imagen de {selected.name}</a>}
+              {selected.videoUrl && <a className="link link-secondary" href={selected.videoUrl} target="_blank" rel="noreferrer">Abrir video de {selected.name}</a>}
             </div>
           </div>
         </article>

@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	identitycontroller "github.com/gmorini/inge-soft-3/backend/internal/identity/controller"
@@ -188,6 +189,134 @@ func TestInvalidRoutineRequests(t *testing.T) {
 	response := perform(t, mux, http.MethodPost, "/api/exercises", token, `{"name":" Plancha ","imageUrl":"relative"}`)
 	if !strings.Contains(response.Body.String(), `"name"`) || !strings.Contains(response.Body.String(), `"imageUrl"`) {
 		t.Fatalf("aggregated errors = %s", response.Body.String())
+	}
+}
+
+func TestAuthenticatedUpdateContracts(t *testing.T) {
+	pool := openTestPool(t)
+	applyMigrations(t, pool)
+	mux, tokenManager := testMux(t, pool)
+	ownerID := seedHTTPUser(t, pool, "update_owner")
+	foreignID := seedHTTPUser(t, pool, "update_foreign")
+	ownerToken, _ := tokenManager.Issue(ownerID, "update_owner")
+	foreignToken, _ := tokenManager.Issue(foreignID, "update_foreign")
+
+	first := decode[struct {
+		ID int64 `json:"id"`
+	}](t, perform(t, mux, http.MethodPost, "/api/exercises", ownerToken, `{"name":"Remo","description":"Vieja","imageUrl":"https://example.com/old"}`))
+	second := decode[struct {
+		ID int64 `json:"id"`
+	}](t, perform(t, mux, http.MethodPost, "/api/exercises", ownerToken, `{"name":"Plancha"}`))
+	session := decode[struct {
+		ID int64 `json:"id"`
+	}](t, perform(t, mux, http.MethodPost, "/api/sessions", ownerToken,
+		`{"name":"Fuerza","exercises":[{"exerciseId":`+itoa(first.ID)+`,"series":3,"repetitions":8,"order":1}]}`))
+	routine := decode[struct {
+		ID int64 `json:"id"`
+	}](t, perform(t, mux, http.MethodPost, "/api/routines", ownerToken,
+		`{"name":"Semana","sessions":[{"sessionId":`+itoa(session.ID)+`,"day":1}]}`))
+
+	response := perform(t, mux, http.MethodPut, "/api/exercises/"+itoa(first.ID), ownerToken, `{"name":"Remo sentado","description":"","imageUrl":"","videoUrl":""}`)
+	updatedExercise := decode[map[string]any](t, response)
+	if response.Code != http.StatusOK || int64(updatedExercise["id"].(float64)) != first.ID || updatedExercise["name"] != "Remo sentado" {
+		t.Fatalf("exercise update = %d, %#v", response.Code, updatedExercise)
+	}
+	if _, exists := updatedExercise["description"]; exists {
+		t.Fatalf("cleared description still present: %#v", updatedExercise)
+	}
+
+	response = perform(t, mux, http.MethodPut, "/api/sessions/"+itoa(session.ID), ownerToken,
+		`{"name":"Fuerza B","description":"Nueva","exercises":[{"exerciseId":`+itoa(second.ID)+`,"series":4,"repetitions":20,"order":1}]}`)
+	updatedSession := decode[struct {
+		ID        int64 `json:"id"`
+		Exercises []struct {
+			Exercise struct {
+				ID int64 `json:"id"`
+			} `json:"exercise"`
+		} `json:"exercises"`
+	}](t, response)
+	if response.Code != http.StatusOK || updatedSession.ID != session.ID || len(updatedSession.Exercises) != 1 || updatedSession.Exercises[0].Exercise.ID != second.ID {
+		t.Fatalf("session update = %d, %#v", response.Code, updatedSession)
+	}
+
+	response = perform(t, mux, http.MethodGet, "/api/routines/"+itoa(routine.ID), ownerToken, "")
+	propagated := decode[struct {
+		Sessions []struct {
+			Session struct {
+				Name string `json:"name"`
+			} `json:"session"`
+		} `json:"sessions"`
+	}](t, response)
+	if len(propagated.Sessions) != 1 || propagated.Sessions[0].Session.Name != "Fuerza B" {
+		t.Fatalf("updated session did not propagate: %#v", propagated)
+	}
+
+	response = perform(t, mux, http.MethodPut, "/api/routines/"+itoa(routine.ID), ownerToken, `{"name":"Semana vacía","sessions":[]}`)
+	emptyRoutine := decode[struct {
+		Sessions []any `json:"sessions"`
+	}](t, response)
+	if response.Code != http.StatusOK || len(emptyRoutine.Sessions) != 0 {
+		t.Fatalf("empty routine replacement = %d, %#v", response.Code, emptyRoutine)
+	}
+
+	missingTarget := perform(t, mux, http.MethodPut, "/api/sessions/999999", ownerToken,
+		`{"name":"Ausente","exercises":[{"exerciseId":999999,"series":1,"repetitions":1,"order":1}]}`)
+	if missingTarget.Code != http.StatusNotFound || !strings.Contains(missingTarget.Body.String(), `"not_found"`) {
+		t.Fatalf("target priority = %d, %s", missingTarget.Code, missingTarget.Body.String())
+	}
+	missingChild := perform(t, mux, http.MethodPut, "/api/sessions/"+itoa(session.ID), ownerToken,
+		`{"name":"No debe persistir","exercises":[{"exerciseId":999999,"series":1,"repetitions":1,"order":1}]}`)
+	if missingChild.Code != http.StatusBadRequest || !strings.Contains(missingChild.Body.String(), "exercises.0.exerciseId") {
+		t.Fatalf("child validation = %d, %s", missingChild.Code, missingChild.Body.String())
+	}
+	unchanged := perform(t, mux, http.MethodGet, "/api/sessions/"+itoa(session.ID), ownerToken, "")
+	if !strings.Contains(unchanged.Body.String(), `"name":"Fuerza B"`) || strings.Contains(unchanged.Body.String(), "No debe persistir") {
+		t.Fatalf("failed update changed session: %s", unchanged.Body.String())
+	}
+
+	if response := perform(t, mux, http.MethodPut, "/api/exercises/"+itoa(first.ID), foreignToken, `{"name":"Ajeno"}`); response.Code != http.StatusNotFound {
+		t.Fatalf("foreign update = %d, %s", response.Code, response.Body.String())
+	}
+	if response := perform(t, mux, http.MethodPut, "/api/exercises/"+itoa(first.ID), "", `{"name":"Sin token"}`); response.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated update = %d", response.Code)
+	}
+	for _, id := range []string{"abc", "0", "-1", "9223372036854775808"} {
+		if response := perform(t, mux, http.MethodPut, "/api/exercises/"+id, ownerToken, `{"name":"Válido"}`); response.Code != http.StatusBadRequest {
+			t.Fatalf("invalid update path %q = %d", id, response.Code)
+		}
+	}
+	if response := perform(t, mux, http.MethodPut, "/api/exercises/999999", ownerToken, `{"name":"","extra":true}`); response.Code != http.StatusBadRequest {
+		t.Fatalf("body validation priority = %d, %s", response.Code, response.Body.String())
+	}
+
+	payloads := []string{
+		`{"name":"Concurrente A","exercises":[]}`,
+		`{"name":"Concurrente B","exercises":[{"exerciseId":` + itoa(second.ID) + `,"series":5,"repetitions":6,"order":1}]}`,
+	}
+	responses := make([]*httptest.ResponseRecorder, len(payloads))
+	var wait sync.WaitGroup
+	for index, payload := range payloads {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			responses[index] = perform(t, mux, http.MethodPut, "/api/sessions/"+itoa(session.ID), ownerToken, payload)
+		}()
+	}
+	wait.Wait()
+	for index, concurrentResponse := range responses {
+		if concurrentResponse.Code != http.StatusOK {
+			t.Fatalf("concurrent update %d = %d, %s", index, concurrentResponse.Code, concurrentResponse.Body.String())
+		}
+	}
+	finalResponse := perform(t, mux, http.MethodGet, "/api/sessions/"+itoa(session.ID), ownerToken, "")
+	finalSession := decode[struct {
+		Name      string `json:"name"`
+		Exercises []any  `json:"exercises"`
+	}](t, finalResponse)
+	if (finalSession.Name == "Concurrente A" && len(finalSession.Exercises) != 0) ||
+		(finalSession.Name == "Concurrente B" && len(finalSession.Exercises) != 1) ||
+		(finalSession.Name != "Concurrente A" && finalSession.Name != "Concurrente B") {
+		t.Fatalf("mixed concurrent state = %#v", finalSession)
 	}
 }
 

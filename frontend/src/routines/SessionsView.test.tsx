@@ -76,4 +76,41 @@ describe('SessionsView', () => {
     expect(await screen.findByText('Sesión Fuerza eliminada.')).toBeInTheDocument()
     expect(confirm).toHaveBeenCalledTimes(2)
   })
+
+  it('replaces a complete edited composition with derived order', async () => {
+    const summary = { id: 6, name: 'Mixta' }
+    const detail = {
+      id: 6, name: 'Mixta', description: 'Original', exercises: [
+        { exercise: exercises[0], series: 3, repetitions: 8, order: 1 },
+        { exercise: exercises[1], series: 2, repetitions: 30, order: 2 },
+      ],
+    }
+    const updated = { ...detail, name: 'Mixta nueva', description: undefined, exercises: [detail.exercises[1]] }
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input)
+      if (init?.method === 'PUT') return jsonResponse(updated)
+      if (path === '/api/exercises') return jsonResponse(exercises)
+      if (path === '/api/sessions/6') return jsonResponse(detail)
+      return jsonResponse([summary])
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<SessionsView onUnauthenticated={vi.fn()} />)
+
+    await user.click(await screen.findByRole('button', { name: 'Editar Mixta' }))
+    const name = screen.getByLabelText('Nombre *')
+    await user.clear(name)
+    await user.type(name, 'Mixta nueva')
+    await user.clear(screen.getByLabelText('Descripción'))
+    await user.click(screen.getByRole('button', { name: 'Quitar Sentadilla' }))
+    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+
+    expect(await screen.findByText('Sesión Mixta nueva actualizada.')).toBeInTheDocument()
+    const request = fetchMock.mock.calls.find(([, init]) => init?.method === 'PUT')
+    expect(JSON.parse(String(request?.[1]?.body))).toEqual({
+      name: 'Mixta nueva', description: '', exercises: [
+        { exerciseId: 2, series: 2, repetitions: 30, order: 1 },
+      ],
+    })
+  })
 })

@@ -88,6 +88,17 @@ func (s *Service) GetExercise(ctx context.Context, userID, exerciseID int64) (da
 	return s.repository.GetExercise(ctx, userID, exerciseID)
 }
 
+func (s *Service) UpdateExercise(ctx context.Context, userID, exerciseID int64, input ExerciseInput) (dao.Exercise, error) {
+	normalized, err := validateExercise(input)
+	if err != nil {
+		return dao.Exercise{}, err
+	}
+	return s.repository.UpdateExercise(ctx, userID, exerciseID, dao.UpdateExerciseParams{
+		Name: normalized.Name, Description: normalized.Description,
+		ImageURL: normalized.ImageURL, VideoURL: normalized.VideoURL,
+	})
+}
+
 func (s *Service) CreateSession(ctx context.Context, userID int64, input SessionInput) (dao.Session, error) {
 	normalized, err := validateSession(input)
 	if err != nil {
@@ -134,6 +145,60 @@ func (s *Service) GetSession(ctx context.Context, userID, sessionID int64) (dao.
 	return s.repository.GetSession(ctx, userID, sessionID)
 }
 
+func (s *Service) UpdateSession(ctx context.Context, userID, sessionID int64, input SessionInput) (dao.Session, error) {
+	normalized, err := validateSession(input)
+	if err != nil {
+		return dao.Session{}, err
+	}
+	tx, err := s.repository.Begin(ctx)
+	if err != nil {
+		return dao.Session{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	exists, err := s.repository.SessionExists(ctx, tx, userID, sessionID)
+	if err != nil {
+		return dao.Session{}, err
+	}
+	if !exists {
+		return dao.Session{}, routineserrors.ErrNotFound
+	}
+	ids := uniqueExerciseIDs(normalized.Exercises)
+	found, err := s.repository.LockExercises(ctx, tx, userID, ids)
+	if err != nil {
+		return dao.Session{}, err
+	}
+	if err := s.repository.LockSession(ctx, tx, userID, sessionID); err != nil {
+		return dao.Session{}, err
+	}
+	if len(found) != len(ids) {
+		return dao.Session{}, unavailableExercises(normalized.Exercises, found)
+	}
+	if err := s.repository.UpdateSessionFields(ctx, tx, userID, sessionID, dao.UpdateSessionParams{
+		Name: normalized.Name, Description: normalized.Description,
+	}); err != nil {
+		return dao.Session{}, err
+	}
+	if err := s.repository.ClearSessionExercises(ctx, tx, userID, sessionID); err != nil {
+		return dao.Session{}, err
+	}
+	selected := make([]dao.SelectedExercise, 0, len(normalized.Exercises))
+	for _, item := range normalized.Exercises {
+		selected = append(selected, dao.SelectedExercise(item))
+	}
+	if err := s.repository.AddSessionExercises(ctx, tx, userID, sessionID, selected); err != nil {
+		return dao.Session{}, classifyUnavailable(err, "exercises")
+	}
+	updated, err := s.repository.GetSessionTx(ctx, tx, userID, sessionID)
+	if err != nil {
+		return dao.Session{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return dao.Session{}, fmt.Errorf("commit session update: %w", err)
+	}
+	return updated, nil
+}
+
 func (s *Service) CreateRoutine(ctx context.Context, userID int64, input RoutineInput) (dao.Routine, error) {
 	normalized, err := validateRoutine(input)
 	if err != nil {
@@ -178,6 +243,60 @@ func (s *Service) ListRoutines(ctx context.Context, userID int64) ([]dao.Routine
 
 func (s *Service) GetRoutine(ctx context.Context, userID, routineID int64) (dao.Routine, error) {
 	return s.repository.GetRoutine(ctx, userID, routineID)
+}
+
+func (s *Service) UpdateRoutine(ctx context.Context, userID, routineID int64, input RoutineInput) (dao.Routine, error) {
+	normalized, err := validateRoutine(input)
+	if err != nil {
+		return dao.Routine{}, err
+	}
+	tx, err := s.repository.Begin(ctx)
+	if err != nil {
+		return dao.Routine{}, err
+	}
+	defer tx.Rollback(ctx)
+
+	exists, err := s.repository.RoutineExists(ctx, tx, userID, routineID)
+	if err != nil {
+		return dao.Routine{}, err
+	}
+	if !exists {
+		return dao.Routine{}, routineserrors.ErrNotFound
+	}
+	ids := uniqueSessionIDs(normalized.Sessions)
+	found, err := s.repository.LockSessions(ctx, tx, userID, ids)
+	if err != nil {
+		return dao.Routine{}, err
+	}
+	if err := s.repository.LockRoutine(ctx, tx, userID, routineID); err != nil {
+		return dao.Routine{}, err
+	}
+	if len(found) != len(ids) {
+		return dao.Routine{}, unavailableSessions(normalized.Sessions, found)
+	}
+	if err := s.repository.UpdateRoutineFields(ctx, tx, userID, routineID, dao.UpdateRoutineParams{
+		Name: normalized.Name, Description: normalized.Description,
+	}); err != nil {
+		return dao.Routine{}, err
+	}
+	if err := s.repository.ClearRoutineSessions(ctx, tx, userID, routineID); err != nil {
+		return dao.Routine{}, err
+	}
+	selected := make([]dao.SelectedSession, 0, len(normalized.Sessions))
+	for _, item := range normalized.Sessions {
+		selected = append(selected, dao.SelectedSession(item))
+	}
+	if err := s.repository.AddRoutineSessions(ctx, tx, userID, routineID, selected); err != nil {
+		return dao.Routine{}, classifyUnavailable(err, "sessions")
+	}
+	updated, err := s.repository.GetRoutineTx(ctx, tx, userID, routineID)
+	if err != nil {
+		return dao.Routine{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return dao.Routine{}, fmt.Errorf("commit routine update: %w", err)
+	}
+	return updated, nil
 }
 
 func (s *Service) DeleteRoutine(ctx context.Context, userID, routineID int64) error {

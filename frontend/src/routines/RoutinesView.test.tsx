@@ -71,4 +71,38 @@ describe('RoutinesView', () => {
     expect(await screen.findByText('No se pudo eliminar la rutina.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Eliminar Semana completa' })).toBeInTheDocument()
   })
+
+  it('prefills and replaces all edited routine assignments', async () => {
+    const session = { id: 3, name: 'Piernas', exercises: [] }
+    const summary = { id: 10, name: 'Semana A' }
+    const detail = { id: 10, name: 'Semana A', description: 'Vieja', sessions: [{ day: 1, session }] }
+    const updated = { id: 10, name: 'Semana B', sessions: [{ day: 7, session }] }
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input)
+      if (init?.method === 'PUT') return jsonResponse(updated)
+      if (path === '/api/sessions') return jsonResponse([session])
+      if (path === '/api/routines/10') return jsonResponse(detail)
+      return jsonResponse([summary])
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<RoutinesView onUnauthenticated={vi.fn()} />)
+
+    await user.click(await screen.findByRole('button', { name: 'Editar Semana A' }))
+    const name = screen.getByLabelText('Nombre *')
+    await user.clear(name)
+    await user.type(name, 'Semana B')
+    await user.clear(screen.getByLabelText('Descripción'))
+    await user.click(screen.getByRole('button', { name: 'Quitar Piernas del lunes' }))
+    await user.selectOptions(screen.getByLabelText('Sesión'), '3')
+    await user.selectOptions(screen.getByLabelText('Día'), '7')
+    await user.click(screen.getByRole('button', { name: 'Agregar sesión' }))
+    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }))
+
+    expect(await screen.findByText('Rutina Semana B actualizada.')).toBeInTheDocument()
+    const request = fetchMock.mock.calls.find(([, init]) => init?.method === 'PUT')
+    expect(JSON.parse(String(request?.[1]?.body))).toEqual({
+      name: 'Semana B', description: '', sessions: [{ sessionId: 3, day: 7 }],
+    })
+  })
 })

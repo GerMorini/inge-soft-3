@@ -5,7 +5,7 @@
 **Prerequisites**: `plan.md`, `spec.md`, `research.md`, `data-model.md`,
 `contracts/openapi.yaml`, `quickstart.md`
 
-**Tests**: Required. The specification declares 12 backend and 6 frontend behavior groups. Tests
+**Tests**: Required. The specification declares 20 backend and 10 frontend behavior groups. Tests
 are written before their corresponding implementation and protect validation, ownership,
 transactions, nested details, ordering, deletion and authentication behavior.
 
@@ -15,7 +15,7 @@ increment. Paths follow the single `routines` backend module and the existing Re
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel because it changes different files and has no unfinished dependency.
-- **[Story]**: Maps work to `US1`, `US2`, `US3` or `US4` from `spec.md`.
+- **[Story]**: Maps work to `US1`, `US2`, `US3`, `US4` or `US5` from `spec.md`.
 - Every implementation task names its concrete target path.
 
 ## Phase 1: Setup (Shared Structure)
@@ -164,18 +164,60 @@ and prove foreign and absent deletes are identical and harmless.
 
 ---
 
-## Phase 7: Polish & Cross-Cutting Validation
+## Phase 7: User Story 5 - Editar contenido propio (Priority: P5)
 
-**Purpose**: Verify security boundaries, architectural simplicity, complete tests and reproducible
-stack behavior across all stories.
+**Goal**: Authenticated users edit owned exercises, sessions and routines through complete PUT
+replacement, with atomic associations, deterministic errors, consistent nested details and guarded
+discard of modified forms.
 
-- [X] T049 [P] Add accessibility coverage for authenticated tabs, headings, labels, move controls, nested details, focusable errors and deletion controls using axe-core in `frontend/src/App.accessibility.test.tsx`
-- [X] T050 Audit every routines repository query and transaction for mandatory `user_id` scoping, parameterization, composite-key use, row/commit error checks and absence of direct DAO leakage to HTTP in `backend/internal/routines/repository/repository.go`, `backend/internal/routines/service/service.go`, and `backend/internal/routines/controller/controller.go`
-- [X] T051 Audit routines logging and frontend rendering to exclude JWTs, request bodies, personal data and unsafe HTML; ensure external media links use safe attributes in `backend/internal/routines/controller/controller.go`, `frontend/src/routines/ExercisesView.tsx`, `frontend/src/routines/SessionsView.tsx`, and `frontend/src/routines/RoutinesView.tsx`
-- [X] T052 Verify no unnecessary interfaces, factories, mappers, generic repositories, DTO/DAO duplication, custom daisyUI wrappers, router, global store or new dependency remains in `backend/internal/routines/`, `frontend/src/routines/`, `backend/go.mod`, and `frontend/package.json`
-- [X] T053 Run `gofmt`, `go test ./...`, routines PostgreSQL tests with `-tags=integration`, and `go vet ./...` from `backend/`; resolve failures only within feature-owned files
-- [X] T054 Run `npm test -- --run` and `npm run build` from `frontend/`; resolve routines regressions and confirm existing authentication tests remain green
-- [X] T055 Execute the authenticated exercise, session, routine, cross-user, validation and deletion scenarios from `specs/002-exercise-routines/quickstart.md` through Docker Compose and record any unresolved deviation in `specs/002-exercise-routines/tasks.md`
+**Independent Test**: Reuse an exercise and session in several containers, edit each entity, verify
+the same IDs and propagated nested details, replace and empty associations, reject invalid or foreign
+targets without partial changes, observe one complete state under concurrency, and confirm that
+cancel/internal navigation preserves or discards dirty drafts according to the chosen response.
+
+### Tests for User Story 5 *(write first and confirm meaningful failure)*
+
+- [X] T049 [P] [US5] Extend service tests for update validation reuse, optional clearing, empty replacement sets, target-before-child error priority, same-ID results and complete rollback classifications in `backend/internal/routines/service/service_test.go`
+- [X] T050 [P] [US5] Extend PostgreSQL tests for single-statement session/routine details including empty containers, live reusable-reference propagation, complete association replacement, rollback, target revalidation, concurrent PUT serialization and before/after-only detail snapshots in `backend/internal/routines/repository/repository_test.go`
+- [X] T051 [P] [US5] Extend HTTP integration tests for all three PUT contracts, strict body decoding, `abc`/zero/negative/overflow path IDs, body-before-target and target-before-child error priority, identical foreign/missing targets, complete response bodies, JWT rejection and atomic failure in `backend/internal/routines/tests/integration_test.go`
+- [X] T052 [P] [US5] Extend exercise UI tests for edit prefill, optional clearing, exact PUT payload, pending-submit protection, response-driven list/detail refresh, preserved rejection input and dirty cancel acceptance/rejection in `frontend/src/routines/ExercisesView.test.tsx`
+- [X] T053 [P] [US5] Extend session UI tests for complete composition prefill, add/remove/reorder, derived `1..N`, empty replacement, exact PUT payload, dirty detection and generic unavailable errors in `frontend/src/routines/SessionsView.test.tsx`
+- [X] T054 [P] [US5] Extend routine UI tests for complete assignment prefill, empty replacement, same-session distinct days, duplicate-pair rejection, canonical dirty comparison independent of visual pair order and exact PUT payload in `frontend/src/routines/RoutinesView.test.tsx`
+- [X] T055 [P] [US5] Add application navigation tests proving unchanged edits switch directly, dirty cancel/tab changes call confirmation, rejected discard preserves view and draft, accepted discard switches without PUT, and authentication loss clears private state in `frontend/src/App.test.tsx`
+
+### Implementation for User Story 5
+
+- [X] T056 [P] [US5] Extend persistence-specific DAO shapes with update parameters and nullable flat session/routine detail rows without HTTP tags or business rules in `backend/internal/routines/dao/dao.go`
+- [X] T057 [US5] Replace multi-query session and routine reads with one owner-scoped `LEFT JOIN` statement each, aggregate empty and nested rows deterministically, and make the same detail SQL callable inside a concrete `pgx.Tx` in `backend/internal/routines/repository/repository.go`
+- [X] T058 [US5] Implement owner-scoped exercise `UPDATE ... RETURNING` with optional NULL clearing and unchanged identity in `backend/internal/routines/repository/repository.go`
+- [X] T059 [US5] Implement session target probe, sorted selected-exercise locks, target recheck/lock, scalar update, association delete-and-insert replacement and in-transaction detail read in `backend/internal/routines/repository/repository.go`
+- [X] T060 [US5] Implement routine target probe, sorted selected-session locks, target recheck/lock, scalar update, assignment delete-and-insert replacement and in-transaction nested detail read in `backend/internal/routines/repository/repository.go`
+- [X] T061 [US5] Implement exercise update use case using existing text/URL validation and owner-scoped not-found behavior in `backend/internal/routines/service/service.go` and `backend/internal/routines/service/validation.go`
+- [X] T062 [US5] Implement session update transaction orchestration with pure validation first, target-before-child public priority, rollback on unavailable references or persistence errors and commit-before-response semantics in `backend/internal/routines/service/service.go`
+- [X] T063 [US5] Implement routine update transaction orchestration with pure validation first, target-before-child public priority, full assignment replacement and last-committed-writer behavior in `backend/internal/routines/service/service.go`
+- [X] T064 [US5] Register protected PUT routes and implement positive-int64 path parsing, strict shared request DTO decoding, trusted owner extraction, complete response mapping and public error precedence in `backend/internal/routines/controller/controller.go`
+- [X] T065 [P] [US5] Add typed exercise/session/routine PUT operations and complete write payloads while reusing current auth/error handling in `frontend/src/routines/types.ts` and `frontend/src/routines/api.ts`
+- [X] T066 [US5] Add create/edit mode, immutable normalized baseline, prefill, save/cancel controls, focus transitions, pending state and response-driven refresh to `frontend/src/routines/ExercisesView.tsx`
+- [X] T067 [US5] Add create/edit mode with complete ordered composition prefill, accessible add/remove/move controls, dirty comparison, empty replacement and preserved errors to `frontend/src/routines/SessionsView.tsx`
+- [X] T068 [US5] Add create/edit mode with complete assignment prefill, canonical `(sessionId, day)` dirty comparison, empty replacement and preserved errors to `frontend/src/routines/RoutinesView.tsx`
+- [X] T069 [US5] Coordinate per-view dirty state in local workspace navigation, use native discard confirmation for cancel/tab changes, preserve rejected navigation and bypass drafts on authentication loss in `frontend/src/App.tsx`, `frontend/src/routines/ExercisesView.tsx`, `frontend/src/routines/SessionsView.tsx`, and `frontend/src/routines/RoutinesView.tsx`
+
+**Checkpoint**: All owned resources support complete, private and atomic editing; details are
+snapshot-consistent and modified drafts cannot be discarded through covered internal actions without
+confirmation.
+
+---
+
+## Phase 8: Polish & Cross-Cutting Validation
+
+**Purpose**: Revalidate architecture, styling, accessibility, security and the complete stack after
+adding editing behavior.
+
+- [X] T070 Apply the constitutional dark daisyUI theme tokens, move the skip-link presentation from global component CSS to local Tailwind utilities, change feature links to secondary semantics and keep only document-wide rules in `frontend/src/styles.css`, `frontend/src/App.tsx`, and `frontend/src/routines/ExercisesView.tsx`
+- [X] T071 [P] Extend axe and keyboard coverage for edit headings, dynamic controls, alerts, status announcements, discard flows and focus restoration across all three edit modes in `frontend/src/App.accessibility.test.tsx`
+- [X] T072 Audit owner scoping, SQL parameterization, target/child error priority, lock hierarchy, commit/rollback handling, flat detail snapshots, DTO/DAO boundaries and absence of unnecessary interfaces in `backend/internal/routines/repository/repository.go`, `backend/internal/routines/service/service.go`, and `backend/internal/routines/controller/controller.go`
+- [X] T073 Run `gofmt`, `go test ./...`, routines PostgreSQL tests with `-tags=integration`, and `go vet ./...` from `backend/`; resolve only feature regressions in `backend/internal/routines/`
+- [X] T074 Run `npm test -- --run` and `npm run build` from `frontend/`, then execute editing, error-priority, propagation, concurrency, discard and visual scenarios from `specs/002-exercise-routines/quickstart.md` through Docker Compose and record unresolved deviations in `specs/002-exercise-routines/tasks.md`
 
 ---
 
@@ -196,7 +238,9 @@ US3 Routines
     ↓
 US4 Deletion
     ↓
-Phase 7 Validation
+US5 Editing
+    ↓
+Phase 8 Validation
 ```
 
 - **Phase 1** has no feature dependency and establishes schema/test migration support.
@@ -205,7 +249,9 @@ Phase 7 Validation
 - **US2** depends on US1 because session creation selects existing exercises.
 - **US3** depends on US2 because routine creation selects existing sessions.
 - **US4** depends on US1-US3 because it verifies cleanup across every established association.
-- **Phase 7** depends on every story selected for delivery.
+- **US5** depends on US1-US4 because it edits all existing resource types and reuses their detail,
+  validation, ownership and deletion/concurrency behavior.
+- **Phase 8** depends on every story selected for delivery.
 
 ### User Story Dependencies
 
@@ -213,6 +259,8 @@ Phase 7 Validation
 - **US2 (P2)**: Requires US1 exercise persistence and catalog API; independently testable with seeded exercises.
 - **US3 (P3)**: Requires US2 session persistence and API; independently testable with seeded sessions.
 - **US4 (P4)**: Requires existing reusable entities and associations; independently testable with a prepared hierarchy.
+- **US5 (P5)**: Requires current exercise, session and routine contracts; independently testable
+  against a prepared reusable hierarchy without changing creation or deletion semantics.
 
 ### Within Each User Story
 
@@ -231,7 +279,9 @@ Phase 7 Validation
 - DTO and DAO tasks marked `[P]` use separate packages and can start together after tests fail.
 - Frontend API/type work can run beside backend implementation after its story contracts are fixed.
 - US2 and US3 are sequential by product data dependency, but their test design can be prepared after earlier contracts stabilize.
-- Security, accessibility and overengineering audits in Phase 7 can be prepared in parallel before final command execution.
+- US5 backend service, repository, HTTP and three view test suites can be written in parallel before
+  production changes; repository and service implementations then follow dependency order.
+- Styling, security and architecture audits in Phase 8 can be prepared before final command execution.
 
 ## Parallel Examples
 
@@ -270,6 +320,17 @@ T041: DELETE HTTP integration tests in backend/internal/routines/tests/integrati
 T042: Confirmation UI tests across frontend/src/routines/*View.test.tsx
 ```
 
+### User Story 5
+
+```text
+T049: Update service/error-priority tests in backend/internal/routines/service/service_test.go
+T050: Snapshot/replacement PostgreSQL tests in backend/internal/routines/repository/repository_test.go
+T051: PUT contract tests in backend/internal/routines/tests/integration_test.go
+T052-T055: Exercise, session, routine and workspace editing tests in separate frontend test files
+T056: DAO shapes in backend/internal/routines/dao/dao.go
+T065: Frontend PUT types and API in frontend/src/routines/types.ts and frontend/src/routines/api.ts
+```
+
 ## Implementation Strategy
 
 ### MVP First
@@ -287,7 +348,8 @@ T042: Confirmation UI tests across frontend/src/routines/*View.test.tsx
 3. US2 adds ordered sessions without changing exercise behavior.
 4. US3 adds complete routines without changing reusable session values.
 5. US4 completes lifecycle cleanup and order compaction.
-6. Phase 7 validates the entire Docker Compose stack.
+6. US5 adds full replacement editing and guarded dirty drafts without changing identifiers.
+7. Phase 8 validates the entire Docker Compose stack.
 
 ## Notes
 

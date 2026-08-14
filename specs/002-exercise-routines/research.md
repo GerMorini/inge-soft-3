@@ -106,20 +106,83 @@ cannot exist independently: https://www.postgresql.org/docs/18/ddl-constraints.h
 
 ## HTTP contract shape
 
-**Decision**: Expose POST, GET collection, GET detail and DELETE detail for all three resources.
-Use direct arrays for collections, nested details, `201` for creation and `204` for deletion.
+**Decision**: Expose POST, GET collection, GET detail, PUT detail and DELETE detail for all three
+resources. PUT replaces the complete editable representation, returns the complete updated detail
+with `200`, and reuses the creation payload shape. Association arrays are required and may be empty;
+optional empty or omitted fields clear their stored values.
 
-**Rationale**: These twelve operations exactly cover create, list, detail and delete. Direct arrays
-avoid pagination metadata that the specification excludes.
+**Rationale**: These fifteen operations cover create, list, detail, edit and delete. PUT is
+idempotent and avoids ambiguous merge rules for nested arrays. Direct arrays avoid pagination
+metadata that the specification excludes.
 
-**Alternatives considered**: Update endpoints, search, pagination and batch APIs exceed scope.
-Separate endpoints for associations expose implementation details without user value.
+**Alternatives considered**: PATCH needs nullable DTO fields plus absent/null/empty merge semantics,
+especially for associations. Separate association endpoints expose persistence details. Search,
+pagination and batch APIs exceed scope.
+
+## Atomic full replacement
+
+**Decision**: Update an exercise with one tenant-scoped `UPDATE ... RETURNING`. For session and
+routine, validate pure rules first, begin a transaction, probe target existence without a lock, lock
+selected children by ascending ID, re-lock/recheck the owned target, and only then expose any
+unavailable-child result. A surviving valid target is updated by deleting old associations and
+inserting the complete new set.
+
+**Rationale**: The non-locking probe makes a statically absent or foreign target win before child
+inspection. Delaying child-error classification until the target lock makes a concurrently deleted
+target win too. Real lock order remains exercises, sessions, routines, preventing a cycle with
+deletion. Delete-and-insert keeps replacement and rollback simple.
+
+**Alternatives considered**: Updating associations in place complicates uniqueness and diff logic.
+Deleting and recreating the parent changes identity and references. Repository-owned transactions,
+generic replacement helpers and unit-of-work abstractions move use-case rules or add indirection.
+Locking the target before children makes error priority trivial but inverts the shared lock order.
+
+## Editing concurrency
+
+**Decision**: Use PostgreSQL `READ COMMITTED` row locks and last-committed-writer semantics. Every
+successful composite edit is one complete state; no ETag, version column, retry framework, history
+or conflict-resolution UI is added.
+
+**Rationale**: Atomicity and ownership are required, while conflict detection is not. Existing
+schema constraints and locks already prevent partial or cross-owner associations.
+
+**Alternatives considered**: Optimistic locking requires schema, API and UI conflict flows without a
+current academic requirement. Serializable isolation and automatic retries add operational logic.
+
+## Consistent nested details
+
+**Decision**: Read each session or routine detail with one flat tenant-scoped SQL statement using
+`LEFT JOIN` through associations and reusable children. Aggregate nullable rows in repository. Read
+the PUT response with the same SQL inside its write transaction before commit, and commit before
+writing the HTTP response.
+
+**Rationale**: PostgreSQL gives one `READ COMMITTED` statement a single MVCC snapshot. A detail is
+therefore entirely before or after a concurrent commit, including empty containers, without a
+read-only transaction. Reading the PUT response before commit guarantees that response represents
+that replacement rather than a later writer.
+
+**Alternatives considered**: Current parent/detail queries in separate autocommit statements can
+mix snapshots and violate FR-042. A read-only `REPEATABLE READ` transaction is correct but adds
+transaction control and round trips. JSON aggregation, views and materialization are unnecessary.
+
+## Live reference propagation
+
+**Decision**: Keep only keys and association-specific values in join tables. Detail queries join
+current exercise and session rows, so queries started after commit expose edited reusable data in
+every container. A query already running may return the previous complete snapshot.
+
+**Rationale**: Normalized live references satisfy propagation without fan-out writes while
+preserving series, repetitions, order and day on their respective associations.
+
+**Alternatives considered**: Copied names, descriptions or nested snapshots can diverge and require
+bulk updates, triggers, events or cache invalidation.
 
 ## Public errors
 
-**Decision**: Keep existing error shape. Use `invalid_request`, `validation_failed`, `invalid_token`,
-`not_found` and `internal_error`. Indexed field paths identify invalid nested associations. Missing
-and foreign resources share the same `404` response.
+**Decision**: Keep existing error shape. Invalid path IDs and malformed bodies use
+`invalid_request`; pure business validation uses `validation_failed`; authentication uses
+`invalid_token`; valid foreign/missing targets share `not_found`. For PUT, pure validation precedes
+target lookup, and target lookup precedes public child-availability errors.
 
 **Rationale**: The contract gives actionable creation feedback while preserving non-disclosure.
 Known errors remain mapped only by controller.
@@ -139,6 +202,37 @@ easy to test with current tools. Native confirmation meets the requirement witho
 **Alternatives considered**: React Router and global state solve no current navigation problem.
 Drag-and-drop adds accessibility, event and dependency complexity. A custom modal adds state solely
 to replace a sufficient browser control.
+
+## Frontend editing state
+
+**Decision**: Each existing view keeps one form with a discriminated `create | edit` mode, editing
+identifier and normalized initial draft. Entering edit preloads complete detail and save sends PUT.
+If the current draft differs, cancel or an internal workspace-section change uses `window.confirm`;
+rejecting keeps form and section, accepting discards without PUT. Unchanged forms leave directly.
+Pending saves disable submission; validation and server errors preserve entered data.
+
+**Rationale**: One form reuses existing validation, ordering and selection controls without a
+second page hierarchy. Explicit per-view comparison is clearer than a form framework. Session array
+order is meaningful; routine assignment order is canonicalized because only `(sessionId, day)` has
+meaning. The complete response updates list and selected detail without an extra GET.
+
+**Alternatives considered**: Duplicate edit components drift from creation behavior. A custom modal
+requires dialog focus management when native confirmation already exists. Persisted drafts and a
+generic form framework exceed scope. `beforeunload` for closing or reloading the browser is excluded
+because the clarified scenarios cover cancel and internal section changes only.
+
+## Visual constitution alignment
+
+**Decision**: Use daisyUI semantic components and Tailwind utilities in each routines view. Define
+the constitutional dark palette once in the global daisyUI theme; keep global CSS limited to theme
+tokens and document-wide behavior. Links use the secondary semantic color and destructive actions
+use error. No feature-specific rule is added to the global stylesheet.
+
+**Rationale**: Semantic classes preserve consistent contrast and make affected styling traceable to
+the component while satisfying constitution 1.3.0.
+
+**Alternatives considered**: Hard-coded component hex values duplicate palette knowledge. A new
+design system or monolithic stylesheet adds abstraction and makes feature styles harder to locate.
 
 ## Frontend API and media
 

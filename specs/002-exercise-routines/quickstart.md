@@ -102,6 +102,58 @@ Expected result: only confirmed deletion proceeds. Containers remain. Every affe
 its prior relative order and displays consecutive values starting at 1. No partial cleanup remains
 after a failure.
 
+## Manual scenario 6: full editing
+
+1. Edit an exercise, change its name and clear previously stored optional fields.
+2. Verify its identifier stays unchanged and nested session details show the new exercise values.
+3. Edit a session, add and remove exercises, change quantities, reorder them and save.
+4. Edit the same session again with an empty exercise list.
+5. Edit a routine, change its fields and replace all session/day assignments, including an empty set.
+6. Start another edit, change several values and cancel. Reject discard once, then accept it.
+7. While an edit form is open, remove one selected child through another account or request and save.
+8. Send a valid PUT whose target and selected child are both unavailable; repeat with an owned
+   target and the same unavailable child.
+9. Attempt each PUT against a known resource owned by the second account and an unused identifier.
+10. Request `abc`, `0`, `-1` and an integer larger than `int64` as path IDs.
+
+Expected result: each successful PUT returns the complete updated detail with the same resource ID.
+Session and routine replacements are atomic, empty lists remove only associations, and a rejected
+reference preserves the complete prior state. Rejected discard keeps the draft; accepted discard
+sends no PUT. Foreign and absent targets return the same `404 not_found` before child feedback,
+while an owned target with a foreign or absent selected child returns generic field feedback. Invalid
+path IDs return `400 invalid_request`.
+
+## Manual scenario 7: editing interface
+
+1. Enter edit mode for an exercise, session and routine in turn.
+2. Confirm each form is prefilled and focus moves to its edit heading.
+3. Submit invalid values and confirm all safe inputs remain visible with field-linked errors.
+4. Submit valid values twice rapidly and confirm only one update is processed while saving.
+5. Inspect navigation, cards, links, validation and destructive actions across all three views.
+6. Modify an edit and try changing among Rutinas, Sesiones and Ejercicios. Reject discard, then
+   repeat and accept it. Repeat from an unchanged edit.
+
+Expected result: edit and cancel controls work by keyboard, pending and result states are announced,
+and no private content remains after a `401`. The interface stays predominantly dark: main and
+surface colors use the constitutional theme, primary/secondary/accent colors retain their semantic
+roles, and red is reserved for error or destructive behavior. Feature styling is traceable to its
+component rather than a monolithic global stylesheet. Dirty internal navigation requests
+confirmation; rejecting keeps the form and section, accepting changes section without PUT, and an
+unchanged form needs no confirmation. Closing or reloading the browser is outside this scenario.
+
+## Manual scenario 8: concurrent consistency and propagation
+
+1. Reuse one exercise in two sessions and one session in two routines.
+2. Edit the exercise, then reopen both sessions and routines.
+3. Edit the reused session fields and composition, then reopen both routines.
+4. Coordinate a session or routine detail request while another client replaces that entity.
+5. Submit two different complete replacements concurrently against one owned entity.
+
+Expected result: every later container detail shows current reusable names, descriptions and
+composition while preserving its own series, repetitions, order or day. A concurrent detail equals
+the complete state before or after a commit, never a mixture. The final state after two successful
+PUT requests equals one complete submitted representation, never combined fields or associations.
+
 ## Contract reference
 
 See [contracts/openapi.yaml](contracts/openapi.yaml) for exact request, response and error shapes.

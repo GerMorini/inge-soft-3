@@ -6,13 +6,14 @@
 
 ## Summary
 
-Implementar ejercicios, sesiones y rutinas privadas dentro de un único módulo backend `routines`.
+Completar ejercicios, sesiones y rutinas privadas dentro del módulo backend `routines`, agregando
+edición autenticada mediante reemplazo completo `PUT` a las operaciones ya implementadas.
 El módulo reutilizará la identidad JWT verificada de spec 001, aplicará pertenencia por usuario en
 toda consulta y persistirá cinco tablas relacionales PostgreSQL con claves compuestas que impidan
-asociaciones entre propietarios distintos. Las creaciones compuestas y la eliminación de ejercicios
-usarán transacciones controladas por service; las foreign keys retirarán asociaciones sin borrar
-contenedores reutilizables. El frontend React incorporará tres vistas simples con daisyUI, estado
-local y reordenamiento mediante botones, sin router, store global ni dependencia adicional.
+asociaciones entre propietarios distintos. Las creaciones y ediciones compuestas, junto con la
+eliminación de ejercicios, usarán transacciones controladas por service. El frontend ampliará sus
+tres vistas con modos locales de creación y edición, formularios precargados y la identidad visual
+oscura constitucional, sin router, store global ni dependencia adicional.
 
 ## Technical Context
 
@@ -21,7 +22,7 @@ local y reordenamiento mediante botones, sin router, store global ni dependencia
 **Primary Dependencies**: Go standard library and existing `github.com/jackc/pgx/v5` 5.10;
 existing React, daisyUI 5.7 and Tailwind CSS 4.3 frontend stack; no new dependencies
 
-**Storage**: PostgreSQL 18.4; five new relational tables in migration 002
+**Storage**: PostgreSQL 18.4; existing five relational tables from migration 002; no new migration
 
 **Testing**: Go `testing`, `httptest` and PostgreSQL integration tests with the existing
 `integration` build tag; Vitest 4, React Testing Library and user-event
@@ -31,14 +32,15 @@ existing React, daisyUI 5.7 and Tailwind CSS 4.3 frontend stack; no new dependen
 **Project Type**: Modular monolith web application
 
 **Performance Goals**: With a warm local database, lists and details complete within 300 ms and
-creates/deletes within 500 ms at p95 for the academic dataset; no separate scale machinery
+creates/updates/deletes within 500 ms at p95 for the academic dataset; no separate scale machinery
 
 **Constraints**: Every operation requires the existing JWT middleware; foreign and absent IDs are
-publicly indistinguishable; no partial composite creation or deletion; names up to 100 characters,
+publicly indistinguishable; no partial composite creation, update or deletion; names up to 100 characters,
 descriptions up to 500, URLs up to 2048, and non-negative quantities within PostgreSQL `integer`;
-no pagination, editing, file upload, search, RLS, ORM, router, drag-and-drop library or global state
+no pagination, partial update, edit history, optimistic versioning, file upload, search, RLS, ORM,
+router, drag-and-drop library or global state
 
-**Scale/Scope**: One new backend module, five tables, twelve authenticated endpoints and three
+**Scale/Scope**: One backend module, five tables, fifteen authenticated endpoints and three
 small frontend views for hundreds of entities per user in an academic single-instance deployment
 
 ## Constitution Check
@@ -55,9 +57,13 @@ small frontend views for hundreds of entities per user in an academic single-ins
       generic mapper or duplicate domain model is introduced.
 - [x] Data design is relational, minimal, constrained where reasonable, and uses no JSON columns.
 - [x] Existing environment configuration and secret handling remain unchanged.
-- [x] Twelve backend and six frontend behaviors have explicit unit or integration coverage.
-- [x] Frontend uses existing daisyUI components and local state without a visual dependency,
-      custom theme or component wrapper.
+- [x] Twenty backend and ten frontend behaviors have explicit unit or integration coverage.
+- [x] Frontend uses existing daisyUI components, Tailwind utilities and local state without a new
+      visual dependency or component wrapper.
+- [x] Global CSS remains limited to Tailwind/daisyUI setup, theme tokens and document-wide rules;
+      feature-specific appearance stays beside routines components or in their utility classes.
+- [x] Dark surfaces and semantic primary, secondary, accent and error colors reuse the palette
+      fixed by constitution 1.3.0, with no alternate palette.
 - [x] No new dependency, infrastructure component or speculative abstraction is required.
 - [x] Existing build, test, migration and Docker Compose workflows remain reproducible after adding
       migration 002 to the migration service.
@@ -65,8 +71,9 @@ small frontend views for hundreds of entities per user in an academic single-ins
 **Post-design re-check**: PASS. Phase 0 and Phase 1 retain one module and five necessary tables.
 Composite foreign keys enforce ownership without RLS or a second authorization system. DTO and DAO
 separate actual HTTP and PostgreSQL structures while service types express only composite use cases.
-Transactions are limited to multi-statement operations. Native buttons implement ordering, and
-existing JWT, request context, fetch, daisyUI and test tooling are reused.
+Transactions are limited to multi-statement operations. Full replacement avoids PATCH merge rules.
+Native buttons implement ordering; existing JWT, request context, fetch, daisyUI, Tailwind and test
+tooling are reused. Editing requires no schema change or new abstraction.
 
 ## Project Structure
 
@@ -116,6 +123,7 @@ backend/
 
 frontend/src/
 ├── App.tsx
+├── styles.css               # global theme, tokens and document-wide rules only
 ├── auth/
 │   ├── session.ts
 │   └── SessionStatus.tsx
@@ -148,6 +156,16 @@ associations and compact affected execution orders. Frontend uses three local vi
 `Bajar` buttons; `order` is derived from array position. `window.confirm` supplies the required
 deletion confirmation without a modal abstraction.
 
+Each frontend view keeps one form with a local `create | edit` mode instead of duplicating pages.
+Editing a session or routine first loads its complete detail, then reuses existing add/remove and
+ordering controls. Save sends the full representation. Each form stores its initial edit draft and
+compares it with current state; cancel or changing the local workspace section calls
+`window.confirm` only when values differ. Rejecting discard keeps section and form unchanged;
+accepting it clears edit state without sending PUT. Authentication loss always clears private state.
+Component-specific styling uses daisyUI and Tailwind classes in the view. The global stylesheet
+defines the dark daisyUI theme and truly global behavior only; existing feature-specific selectors
+are moved beside their owner or replaced with local utilities when touched.
+
 ## Persistence and Transaction Design
 
 - `exercises`, `workout_sessions` and `routines` use `(user_id, id)` primary keys.
@@ -158,35 +176,76 @@ deletion confirmation without a modal abstraction.
 - Association foreign keys use `ON DELETE CASCADE`; deleting a user remains outside this feature.
 - Session and routine creation validate selected IDs with tenant-scoped locking, insert the parent
   and associations, then commit as one operation.
+- Exercise update is one tenant-scoped `UPDATE ... RETURNING` and needs no explicit transaction.
+- Session update validates all pure rules, begins a transaction and performs an unlocked,
+  tenant-scoped target existence probe. It then locks selected exercises by ascending ID with
+  `FOR KEY SHARE`, locks the target session with `FOR UPDATE`, resolves target absence before any
+  recorded child-availability error, updates fields, deletes old associations and inserts the
+  complete new composition before commit.
+- Routine update follows the same sequence: pure validation, scoped target probe, selected-session
+  locks by ascending ID, target routine lock, error-priority resolution, field update and complete
+  association replacement.
+- Global lock order remains exercises, sessions, routines. `READ COMMITTED` is sufficient. Any
+  failure rolls back fields and associations to the previous complete state.
+- Empty association lists are valid. No migration, timestamp, version, audit history, soft delete,
+  retry framework or optimistic-lock mechanism is introduced. Concurrent writers use the last
+  committed complete replacement.
 - Exercise deletion locks its target and affected sessions, defers the execution-order uniqueness
   constraint, deletes associations through cascade and applies `row_number()` to compact remaining
   orders before commit.
-- Routine detail uses an explicit tenant-scoped joined query ordered by day and exercise order;
-  no JSON aggregation, view, materialization or read transaction is required.
+- Session and routine details each use one tenant-scoped flat `LEFT JOIN` statement and aggregate
+  nullable rows in repository. Under `READ COMMITTED`, one statement receives one committed MVCC
+  snapshot, so a response cannot combine parent fields or associations from opposite sides of a
+  concurrent edit. Empty containers still produce a parent row. PUT reads its response through the
+  same detail SQL inside the write transaction before commit, then commits before writing HTTP.
+  No read transaction, executor interface, JSON aggregation, view or materialization is introduced.
+  Exercise detail remains one statement.
+- Details continue joining referenced exercise and session rows rather than snapshots, so editing a
+  reusable child appears in every subsequent containing detail while association values remain.
 
 ## HTTP and Interface Design
 
 - Authenticated `/api/exercises`, `/api/sessions` and `/api/routines` resources support POST, GET
-  collection, GET detail and DELETE detail.
+  collection, GET detail, PUT detail and DELETE detail.
+- Each PUT uses the same complete writable shape as creation and returns `200` with `Exercise`,
+  `SessionDetail` or `RoutineDetail`. Optional empty/omitted fields are cleared; required association
+  arrays may be empty. IDs and owner are never accepted from the body.
 - Collection responses are direct arrays because pagination and response metadata are out of scope.
 - Details expose nested reusable content but never user IDs, secrets or persistence-only fields.
 - `400 validation_failed` reports every detectable field or association error; indexed keys identify
   nested inputs. `404 not_found` is identical for absent and foreign resources. Existing
   `401 invalid_token` behavior is reused.
+- Non-numeric, non-positive and out-of-range path IDs return `400 invalid_request`. For a
+  structurally and semantically valid PUT, the service resolves target absence/ownership as
+  `404 not_found` before returning unavailable selected references. Pure validation remains first.
 - Lists use ID order; session exercises use execution order; routine assignments use day and session
   ID. No unsupported user-defined ordering is implied.
 - Frontend provides explicit loading, empty, success and error states. Optional external URLs render
   as safe links, not embedded or downloaded media.
+- Edit actions prefill current values. Save is disabled while pending and errors preserve input.
+  Dirty cancel and local section changes request discard confirmation; rejected confirmation keeps
+  the draft and selected section, accepted confirmation restores creation mode without an API call.
+  No confirmation is added for ordinary saves or unchanged forms.
+- UI uses `#1c1d1e` for main background, `#252728` for surfaces, `#b6ff57` for primary actions,
+  `#5d58f3` for selection and links, `#ff7cff` for non-critical accent, and `#ee0000` only for
+  errors or destructive actions, exposed through daisyUI semantic classes rather than component hex.
 
 ## Verification Strategy
 
 - Pure service tests cover text, URL, integer, day, duplicate and consecutive-order rules.
 - PostgreSQL tests cover composite ownership constraints, tenant-scoped queries, atomic creation,
-  association cascades, exercise-order compaction and reuse with independent values.
+  atomic full replacement, rollback, association cascades, exercise-order compaction and reuse with
+  independent values. Concurrent replacement and read tests prove complete, non-mixed final states
+  and snapshot-consistent nested details.
 - HTTP integration tests obtain real JWTs through spec 001 and prove authenticated contracts plus
-  indistinguishable foreign/missing behavior.
+  indistinguishable foreign/missing behavior, invalid path handling and target-before-reference
+  error priority.
 - Frontend tests cover exercise validation, exercise ordering, routine day assignments, nested
-  detail, empty states, deletion confirmation and expired authentication fallback.
+  detail, edit prefill/save/cancel, complete association replacement, preserved validation input,
+  pending-submit protection, dirty discard acceptance/rejection, deletion confirmation and expired
+  authentication fallback.
+- Accessibility tests cover focus on entering edit mode, labelled dynamic controls, visible status
+  and error announcements, keyboard actions and axe checks for all three edit forms.
 - Docker Compose validation applies migrations 001 then 002 and exercises the flows through the
   frontend proxy.
 

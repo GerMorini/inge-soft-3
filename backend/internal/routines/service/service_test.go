@@ -108,3 +108,28 @@ func TestValidateRoutine(t *testing.T) {
 		})
 	}
 }
+
+func TestReplacementInputsReuseValidationAndIndexUnavailableChildren(t *testing.T) {
+	exercise, err := validateExercise(ExerciseInput{Name: "Remo", Description: "", ImageURL: "", VideoURL: ""})
+	if err != nil || exercise.Description != nil || exercise.ImageURL != nil || exercise.VideoURL != nil {
+		t.Fatalf("normalized exercise = %+v, %v", exercise, err)
+	}
+	session, err := validateSession(SessionInput{Name: "Sesión vacía", Exercises: []SelectedExercise{}})
+	if err != nil || len(session.Exercises) != 0 {
+		t.Fatalf("normalized session = %+v, %v", session, err)
+	}
+	routine, err := validateRoutine(RoutineInput{Name: "Rutina vacía", Sessions: []SelectedSession{}})
+	if err != nil || len(routine.Sessions) != 0 {
+		t.Fatalf("normalized routine = %+v, %v", routine, err)
+	}
+
+	var validation *routineserrors.ValidationError
+	err = unavailableExercises([]SelectedExercise{{ExerciseID: 1}, {ExerciseID: 2}}, []int64{1})
+	if !stderrors.As(err, &validation) || len(validation.Fields["exercises.1.exerciseId"]) == 0 {
+		t.Fatalf("exercise availability error = %v", err)
+	}
+	err = unavailableSessions([]SelectedSession{{SessionID: 3, Day: 1}, {SessionID: 4, Day: 2}}, []int64{4})
+	if !stderrors.As(err, &validation) || len(validation.Fields["sessions.0.sessionId"]) == 0 {
+		t.Fatalf("session availability error = %v", err)
+	}
+}

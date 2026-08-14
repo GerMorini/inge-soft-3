@@ -15,6 +15,35 @@ type Repository struct {
 	db *pgxpool.Pool
 }
 
+const sessionDetailQuery = `
+	SELECT s.id, s.name, s.description,
+	       e.id, e.name, e.description, e.image_url, e.video_url,
+	       se.series_count, se.repetition_count, se.execution_order
+	FROM workout_sessions s
+	LEFT JOIN session_exercises se
+	  ON se.user_id = s.user_id AND se.session_id = s.id
+	LEFT JOIN exercises e
+	  ON e.user_id = se.user_id AND e.id = se.exercise_id
+	WHERE s.user_id = $1 AND s.id = $2
+	ORDER BY se.execution_order, e.id`
+
+const routineDetailQuery = `
+	SELECT r.id, r.name, r.description,
+	       rs.day_of_week, s.id, s.name, s.description,
+	       e.id, e.name, e.description, e.image_url, e.video_url,
+	       se.series_count, se.repetition_count, se.execution_order
+	FROM routines r
+	LEFT JOIN routine_sessions rs
+	  ON rs.user_id = r.user_id AND rs.routine_id = r.id
+	LEFT JOIN workout_sessions s
+	  ON s.user_id = rs.user_id AND s.id = rs.session_id
+	LEFT JOIN session_exercises se
+	  ON se.user_id = s.user_id AND se.session_id = s.id
+	LEFT JOIN exercises e
+	  ON e.user_id = se.user_id AND e.id = se.exercise_id
+	WHERE r.user_id = $1 AND r.id = $2
+	ORDER BY rs.day_of_week, s.id, se.execution_order, e.id`
+
 func New(db *pgxpool.Pool) *Repository {
 	return &Repository{db: db}
 }
@@ -84,6 +113,24 @@ func (r *Repository) GetExercise(ctx context.Context, userID, exerciseID int64) 
 	return exercise, nil
 }
 
+func (r *Repository) UpdateExercise(ctx context.Context, userID, exerciseID int64, params dao.UpdateExerciseParams) (dao.Exercise, error) {
+	const query = `
+		UPDATE exercises
+		SET name = $3, description = $4, image_url = $5, video_url = $6
+		WHERE user_id = $1 AND id = $2
+		RETURNING id, name, description, image_url, video_url`
+	var exercise dao.Exercise
+	err := r.db.QueryRow(ctx, query, userID, exerciseID, params.Name, params.Description, params.ImageURL, params.VideoURL).
+		Scan(&exercise.ID, &exercise.Name, &exercise.Description, &exercise.ImageURL, &exercise.VideoURL)
+	if stderrors.Is(err, pgx.ErrNoRows) {
+		return dao.Exercise{}, routineserrors.ErrNotFound
+	}
+	if err != nil {
+		return dao.Exercise{}, fmt.Errorf("update exercise: %w", err)
+	}
+	return exercise, nil
+}
+
 func (r *Repository) LockExercises(ctx context.Context, tx pgx.Tx, userID int64, exerciseIDs []int64) ([]int64, error) {
 	if len(exerciseIDs) == 0 {
 		return []int64{}, nil
@@ -138,6 +185,47 @@ func (r *Repository) AddSessionExercises(ctx context.Context, tx pgx.Tx, userID,
 	return nil
 }
 
+func (r *Repository) SessionExists(ctx context.Context, tx pgx.Tx, userID, sessionID int64) (bool, error) {
+	const query = `SELECT EXISTS (SELECT 1 FROM workout_sessions WHERE user_id = $1 AND id = $2)`
+	var exists bool
+	if err := tx.QueryRow(ctx, query, userID, sessionID).Scan(&exists); err != nil {
+		return false, fmt.Errorf("check workout session existence: %w", err)
+	}
+	return exists, nil
+}
+
+func (r *Repository) LockSession(ctx context.Context, tx pgx.Tx, userID, sessionID int64) error {
+	const query = `SELECT id FROM workout_sessions WHERE user_id = $1 AND id = $2 FOR UPDATE`
+	var id int64
+	err := tx.QueryRow(ctx, query, userID, sessionID).Scan(&id)
+	if stderrors.Is(err, pgx.ErrNoRows) {
+		return routineserrors.ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("lock workout session: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) UpdateSessionFields(ctx context.Context, tx pgx.Tx, userID, sessionID int64, params dao.UpdateSessionParams) error {
+	const query = `UPDATE workout_sessions SET name = $3, description = $4 WHERE user_id = $1 AND id = $2`
+	tag, err := tx.Exec(ctx, query, userID, sessionID, params.Name, params.Description)
+	if err != nil {
+		return fmt.Errorf("update workout session: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return routineserrors.ErrNotFound
+	}
+	return nil
+}
+
+func (r *Repository) ClearSessionExercises(ctx context.Context, tx pgx.Tx, userID, sessionID int64) error {
+	if _, err := tx.Exec(ctx, `DELETE FROM session_exercises WHERE user_id = $1 AND session_id = $2`, userID, sessionID); err != nil {
+		return fmt.Errorf("clear workout session exercises: %w", err)
+	}
+	return nil
+}
+
 func (r *Repository) ListSessions(ctx context.Context, userID int64) ([]dao.Session, error) {
 	const query = `
 		SELECT id, name, description
@@ -164,46 +252,50 @@ func (r *Repository) ListSessions(ctx context.Context, userID int64) ([]dao.Sess
 }
 
 func (r *Repository) GetSession(ctx context.Context, userID, sessionID int64) (dao.Session, error) {
-	const parentQuery = `
-		SELECT id, name, description
-		FROM workout_sessions
-		WHERE user_id = $1 AND id = $2`
-	var session dao.Session
-	err := r.db.QueryRow(ctx, parentQuery, userID, sessionID).
-		Scan(&session.ID, &session.Name, &session.Description)
-	if stderrors.Is(err, pgx.ErrNoRows) {
-		return dao.Session{}, routineserrors.ErrNotFound
-	}
+	rows, err := r.db.Query(ctx, sessionDetailQuery, userID, sessionID)
 	if err != nil {
 		return dao.Session{}, fmt.Errorf("get workout session: %w", err)
 	}
+	return scanSessionDetail(rows)
+}
 
-	const detailQuery = `
-		SELECT e.id, e.name, e.description, e.image_url, e.video_url,
-		       se.series_count, se.repetition_count, se.execution_order
-		FROM session_exercises se
-		JOIN exercises e ON e.user_id = se.user_id AND e.id = se.exercise_id
-		WHERE se.user_id = $1 AND se.session_id = $2
-		ORDER BY se.execution_order`
-	rows, err := r.db.Query(ctx, detailQuery, userID, sessionID)
+func (r *Repository) GetSessionTx(ctx context.Context, tx pgx.Tx, userID, sessionID int64) (dao.Session, error) {
+	rows, err := tx.Query(ctx, sessionDetailQuery, userID, sessionID)
 	if err != nil {
-		return dao.Session{}, fmt.Errorf("list session exercises: %w", err)
+		return dao.Session{}, fmt.Errorf("get workout session in transaction: %w", err)
 	}
+	return scanSessionDetail(rows)
+}
+
+func scanSessionDetail(rows pgx.Rows) (dao.Session, error) {
 	defer rows.Close()
-	session.Exercises = make([]dao.SessionExercise, 0)
+	var session dao.Session
+	seenParent := false
 	for rows.Next() {
-		var item dao.SessionExercise
+		var row dao.SessionDetailRow
 		if err := rows.Scan(
-			&item.Exercise.ID, &item.Exercise.Name, &item.Exercise.Description,
-			&item.Exercise.ImageURL, &item.Exercise.VideoURL, &item.Series,
-			&item.Repetitions, &item.Order,
+			&row.SessionID, &row.SessionName, &row.SessionDescription,
+			&row.ExerciseID, &row.ExerciseName, &row.ExerciseDescription,
+			&row.ImageURL, &row.VideoURL, &row.Series, &row.Repetitions, &row.Order,
 		); err != nil {
-			return dao.Session{}, fmt.Errorf("scan session exercise: %w", err)
+			return dao.Session{}, fmt.Errorf("scan workout session detail: %w", err)
 		}
-		session.Exercises = append(session.Exercises, item)
+		if !seenParent {
+			session = dao.Session{ID: row.SessionID, Name: row.SessionName, Description: row.SessionDescription, Exercises: make([]dao.SessionExercise, 0)}
+			seenParent = true
+		}
+		if row.ExerciseID != nil {
+			session.Exercises = append(session.Exercises, dao.SessionExercise{
+				Exercise: dao.Exercise{ID: *row.ExerciseID, Name: *row.ExerciseName, Description: row.ExerciseDescription, ImageURL: row.ImageURL, VideoURL: row.VideoURL},
+				Series:   *row.Series, Repetitions: *row.Repetitions, Order: *row.Order,
+			})
+		}
 	}
 	if err := rows.Err(); err != nil {
-		return dao.Session{}, fmt.Errorf("iterate session exercises: %w", err)
+		return dao.Session{}, fmt.Errorf("iterate workout session detail: %w", err)
+	}
+	if !seenParent {
+		return dao.Session{}, routineserrors.ErrNotFound
 	}
 	return session, nil
 }
@@ -261,6 +353,47 @@ func (r *Repository) AddRoutineSessions(ctx context.Context, tx pgx.Tx, userID, 
 	return nil
 }
 
+func (r *Repository) RoutineExists(ctx context.Context, tx pgx.Tx, userID, routineID int64) (bool, error) {
+	const query = `SELECT EXISTS (SELECT 1 FROM routines WHERE user_id = $1 AND id = $2)`
+	var exists bool
+	if err := tx.QueryRow(ctx, query, userID, routineID).Scan(&exists); err != nil {
+		return false, fmt.Errorf("check routine existence: %w", err)
+	}
+	return exists, nil
+}
+
+func (r *Repository) LockRoutine(ctx context.Context, tx pgx.Tx, userID, routineID int64) error {
+	const query = `SELECT id FROM routines WHERE user_id = $1 AND id = $2 FOR UPDATE`
+	var id int64
+	err := tx.QueryRow(ctx, query, userID, routineID).Scan(&id)
+	if stderrors.Is(err, pgx.ErrNoRows) {
+		return routineserrors.ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("lock routine: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) UpdateRoutineFields(ctx context.Context, tx pgx.Tx, userID, routineID int64, params dao.UpdateRoutineParams) error {
+	const query = `UPDATE routines SET name = $3, description = $4 WHERE user_id = $1 AND id = $2`
+	tag, err := tx.Exec(ctx, query, userID, routineID, params.Name, params.Description)
+	if err != nil {
+		return fmt.Errorf("update routine: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return routineserrors.ErrNotFound
+	}
+	return nil
+}
+
+func (r *Repository) ClearRoutineSessions(ctx context.Context, tx pgx.Tx, userID, routineID int64) error {
+	if _, err := tx.Exec(ctx, `DELETE FROM routine_sessions WHERE user_id = $1 AND routine_id = $2`, userID, routineID); err != nil {
+		return fmt.Errorf("clear routine sessions: %w", err)
+	}
+	return nil
+}
+
 func (r *Repository) ListRoutines(ctx context.Context, userID int64) ([]dao.Routine, error) {
 	const query = `
 		SELECT id, name, description
@@ -287,68 +420,62 @@ func (r *Repository) ListRoutines(ctx context.Context, userID int64) ([]dao.Rout
 }
 
 func (r *Repository) GetRoutine(ctx context.Context, userID, routineID int64) (dao.Routine, error) {
-	const parentQuery = `
-		SELECT id, name, description
-		FROM routines
-		WHERE user_id = $1 AND id = $2`
-	var routine dao.Routine
-	err := r.db.QueryRow(ctx, parentQuery, userID, routineID).
-		Scan(&routine.ID, &routine.Name, &routine.Description)
-	if stderrors.Is(err, pgx.ErrNoRows) {
-		return dao.Routine{}, routineserrors.ErrNotFound
-	}
+	rows, err := r.db.Query(ctx, routineDetailQuery, userID, routineID)
 	if err != nil {
 		return dao.Routine{}, fmt.Errorf("get routine: %w", err)
 	}
+	return scanRoutineDetail(rows)
+}
 
-	const detailQuery = `
-		SELECT rs.day_of_week, s.id, s.name, s.description,
-		       e.id, e.name, e.description, e.image_url, e.video_url,
-		       se.series_count, se.repetition_count, se.execution_order
-		FROM routine_sessions rs
-		JOIN workout_sessions s ON s.user_id = rs.user_id AND s.id = rs.session_id
-		LEFT JOIN session_exercises se ON se.user_id = s.user_id AND se.session_id = s.id
-		LEFT JOIN exercises e ON e.user_id = se.user_id AND e.id = se.exercise_id
-		WHERE rs.user_id = $1 AND rs.routine_id = $2
-		ORDER BY rs.day_of_week, s.id, se.execution_order, e.id`
-	rows, err := r.db.Query(ctx, detailQuery, userID, routineID)
+func (r *Repository) GetRoutineTx(ctx context.Context, tx pgx.Tx, userID, routineID int64) (dao.Routine, error) {
+	rows, err := tx.Query(ctx, routineDetailQuery, userID, routineID)
 	if err != nil {
-		return dao.Routine{}, fmt.Errorf("load routine detail: %w", err)
+		return dao.Routine{}, fmt.Errorf("get routine in transaction: %w", err)
 	}
+	return scanRoutineDetail(rows)
+}
+
+func scanRoutineDetail(rows pgx.Rows) (dao.Routine, error) {
 	defer rows.Close()
-	routine.Sessions = make([]dao.RoutineSession, 0)
+	var routine dao.Routine
+	seenParent := false
 	var current *dao.RoutineSession
 	for rows.Next() {
-		var day int16
-		var sessionID int64
-		var sessionName string
-		var sessionDescription *string
-		var exerciseID *int64
-		var exerciseName, exerciseDescription, imageURL, videoURL *string
-		var series, repetitions, order *int32
+		var row dao.RoutineDetailRow
 		if err := rows.Scan(
-			&day, &sessionID, &sessionName, &sessionDescription,
-			&exerciseID, &exerciseName, &exerciseDescription, &imageURL, &videoURL,
-			&series, &repetitions, &order,
+			&row.RoutineID, &row.RoutineName, &row.RoutineDescription,
+			&row.Day, &row.SessionID, &row.SessionName, &row.SessionDescription,
+			&row.ExerciseID, &row.ExerciseName, &row.ExerciseDescription,
+			&row.ImageURL, &row.VideoURL, &row.Series, &row.Repetitions, &row.Order,
 		); err != nil {
 			return dao.Routine{}, fmt.Errorf("scan routine detail: %w", err)
 		}
-		if current == nil || current.Day != day || current.Session.ID != sessionID {
+		if !seenParent {
+			routine = dao.Routine{ID: row.RoutineID, Name: row.RoutineName, Description: row.RoutineDescription, Sessions: make([]dao.RoutineSession, 0)}
+			seenParent = true
+		}
+		if row.SessionID == nil {
+			continue
+		}
+		if current == nil || current.Day != *row.Day || current.Session.ID != *row.SessionID {
 			routine.Sessions = append(routine.Sessions, dao.RoutineSession{
-				Day:     day,
-				Session: dao.Session{ID: sessionID, Name: sessionName, Description: sessionDescription, Exercises: make([]dao.SessionExercise, 0)},
+				Day:     *row.Day,
+				Session: dao.Session{ID: *row.SessionID, Name: *row.SessionName, Description: row.SessionDescription, Exercises: make([]dao.SessionExercise, 0)},
 			})
 			current = &routine.Sessions[len(routine.Sessions)-1]
 		}
-		if exerciseID != nil {
+		if row.ExerciseID != nil {
 			current.Session.Exercises = append(current.Session.Exercises, dao.SessionExercise{
-				Exercise: dao.Exercise{ID: *exerciseID, Name: *exerciseName, Description: exerciseDescription, ImageURL: imageURL, VideoURL: videoURL},
-				Series:   *series, Repetitions: *repetitions, Order: *order,
+				Exercise: dao.Exercise{ID: *row.ExerciseID, Name: *row.ExerciseName, Description: row.ExerciseDescription, ImageURL: row.ImageURL, VideoURL: row.VideoURL},
+				Series:   *row.Series, Repetitions: *row.Repetitions, Order: *row.Order,
 			})
 		}
 	}
 	if err := rows.Err(); err != nil {
 		return dao.Routine{}, fmt.Errorf("iterate routine detail: %w", err)
+	}
+	if !seenParent {
+		return dao.Routine{}, routineserrors.ErrNotFound
 	}
 	return routine, nil
 }

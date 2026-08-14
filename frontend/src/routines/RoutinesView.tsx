@@ -1,11 +1,12 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { ApiError } from '../auth/types'
-import { createRoutine, deleteRoutine, getRoutine, listRoutines, listSessions } from './api'
+import { createRoutine, deleteRoutine, getRoutine, listRoutines, listSessions, updateRoutine } from './api'
 import type { FieldErrors, RoutineDetail, RoutineSummary, SessionSummary } from './types'
 import { SessionDetailCard } from './SessionsView'
 
 interface RoutinesViewProps {
   onUnauthenticated: () => void
+  onDirtyChange?: (dirty: boolean) => void
 }
 
 const weekdays = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
@@ -15,18 +16,38 @@ interface Assignment {
   day: number
 }
 
-export function RoutinesView({ onUnauthenticated }: RoutinesViewProps) {
+const emptyRoutineForm = { name: '', description: '' }
+
+function routineDraft(form: typeof emptyRoutineForm, assignments: Assignment[]) {
+  const sessions = assignments
+    .map((item) => ({ sessionId: item.session.id, day: item.day }))
+    .sort((left, right) => left.day - right.day || left.sessionId - right.sessionId)
+  return JSON.stringify({ ...form, sessions })
+}
+
+export function RoutinesView({ onUnauthenticated, onDirtyChange }: RoutinesViewProps) {
   const [routines, setRoutines] = useState<RoutineSummary[]>([])
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [selected, setSelected] = useState<RoutineDetail | null>(null)
   const [assignments, setAssignments] = useState<Assignment[]>([])
   const [sessionID, setSessionID] = useState('')
   const [day, setDay] = useState('1')
-  const [form, setForm] = useState({ name: '', description: '' })
+  const [form, setForm] = useState(emptyRoutineForm)
   const [fields, setFields] = useState<FieldErrors>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [editingID, setEditingID] = useState<number | null>(null)
+  const [baseline, setBaseline] = useState('')
+  const [saving, setSaving] = useState(false)
+  const formTitleRef = useRef<HTMLHeadingElement>(null)
+  const errorRef = useRef<HTMLParagraphElement>(null)
+  const draft = useMemo(() => routineDraft(form, assignments), [assignments, form])
+  const dirty = editingID !== null && draft !== baseline
+
+  useEffect(() => { onDirtyChange?.(dirty) }, [dirty, onDirtyChange])
+  useEffect(() => { if (editingID !== null) formTitleRef.current?.focus() }, [editingID])
+  useEffect(() => { if (error) errorRef.current?.focus() }, [error])
 
   async function load() {
     setLoading(true)
@@ -73,20 +94,62 @@ export function RoutinesView({ onUnauthenticated }: RoutinesViewProps) {
     }
     setFields({})
     setError('')
+    setSaving(true)
     try {
-      const created = await createRoutine({
+      const input = {
         ...form,
         sessions: assignments.map((item) => ({ sessionId: item.session.id, day: item.day })),
-      }, onUnauthenticated)
-      setRoutines((current) => [...current, created].sort((a, b) => a.id - b.id))
-      setSelected(created)
+      }
+      const saved = editingID === null
+        ? await createRoutine(input, onUnauthenticated)
+        : await updateRoutine(editingID, input, onUnauthenticated)
+      setRoutines((current) => editingID === null
+        ? [...current, saved].sort((a, b) => a.id - b.id)
+        : current.map((item) => item.id === saved.id ? saved : item))
+      setSelected(saved)
       setAssignments([])
-      setForm({ name: '', description: '' })
-      setMessage(`Rutina ${created.name} creada.`)
+      setForm(emptyRoutineForm)
+      setEditingID(null)
+      setBaseline('')
+      setMessage(`Rutina ${saved.name} ${editingID === null ? 'creada' : 'actualizada'}.`)
     } catch (reason) {
       if (reason instanceof ApiError) setFields(reason.body.fields ?? {})
       if (!(reason instanceof ApiError && reason.status === 401)) setError(reason instanceof Error ? reason.message : 'No se pudo crear la rutina.')
+    } finally {
+      setSaving(false)
     }
+  }
+
+  async function edit(id: number) {
+    setError('')
+    setMessage('')
+    try {
+      const routine = await getRoutine(id, onUnauthenticated)
+      const nextForm = { name: routine.name, description: routine.description ?? '' }
+      const nextAssignments = routine.sessions.map((item) => ({ session: item.session, day: item.day }))
+      setSelected(routine)
+      setForm(nextForm)
+      setAssignments(nextAssignments)
+      setEditingID(routine.id)
+      setBaseline(routineDraft(nextForm, nextAssignments))
+      setFields({})
+    } catch (reason) {
+      if (!(reason instanceof ApiError && reason.status === 401)) setError('La rutina ya no está disponible.')
+    }
+  }
+
+  function resetEdit() {
+    setEditingID(null)
+    setBaseline('')
+    setForm(emptyRoutineForm)
+    setAssignments([])
+    setFields({})
+    setError('')
+  }
+
+  function cancelEdit() {
+    if (dirty && !window.confirm('Tenés cambios sin guardar. ¿Querés descartarlos?')) return
+    resetEdit()
   }
 
   async function inspect(id: number) {
@@ -103,6 +166,7 @@ export function RoutinesView({ onUnauthenticated }: RoutinesViewProps) {
     setError('')
     try {
       await deleteRoutine(routine.id, onUnauthenticated)
+      if (editingID === routine.id) resetEdit()
       setRoutines((current) => current.filter((item) => item.id !== routine.id))
       setSelected((current) => current?.id === routine.id ? null : current)
       setMessage(`Rutina ${routine.name} eliminada.`)
@@ -115,11 +179,11 @@ export function RoutinesView({ onUnauthenticated }: RoutinesViewProps) {
     <section aria-labelledby="routines-title" className="space-y-6">
       <h2 className="text-2xl font-bold" id="routines-title">Rutinas</h2>
       {message && <p className="alert alert-success" role="status">{message}</p>}
-      {error && <p className="alert alert-error" role="alert" tabIndex={-1}>{error}</p>}
+      {error && <p className="alert alert-error" ref={errorRef} role="alert" tabIndex={-1}>{error}</p>}
 
-      <form aria-label="Crear rutina" className="card bg-base-200" onSubmit={submit} noValidate>
+      <form aria-label={editingID === null ? 'Crear rutina' : 'Editar rutina'} className="card bg-base-200" onSubmit={submit} noValidate>
         <div className="card-body gap-4">
-          <h3 className="card-title">Crear rutina</h3>
+          <h3 className="card-title" ref={formTitleRef} tabIndex={-1}>{editingID === null ? 'Crear rutina' : 'Editar rutina'}</h3>
           <label className="fieldset">
             <span className="fieldset-legend">Nombre *</span>
             <input className={`input w-full ${fields.name ? 'input-error' : ''}`} value={form.name} required aria-invalid={fields.name ? 'true' : undefined} aria-describedby={fields.name ? 'routine-name-error' : undefined} onChange={(event) => setForm({ ...form, name: event.target.value })} />
@@ -160,7 +224,10 @@ export function RoutinesView({ onUnauthenticated }: RoutinesViewProps) {
               </ul>
             )}
           </fieldset>
-          <button className="btn btn-primary" type="submit">Crear rutina</button>
+          <div className="flex flex-wrap gap-2">
+            <button className="btn btn-primary" disabled={saving} type="submit">{saving ? 'Guardando cambios…' : editingID === null ? 'Crear rutina' : 'Guardar cambios'}</button>
+            {editingID !== null && <button className="btn btn-secondary" disabled={saving} type="button" onClick={cancelEdit}>Cancelar edición</button>}
+          </div>
         </div>
       </form>
 
@@ -175,6 +242,7 @@ export function RoutinesView({ onUnauthenticated }: RoutinesViewProps) {
                   {routine.description && <p>{routine.description}</p>}
                   <div className="card-actions">
                     <button className="btn btn-sm" type="button" onClick={() => void inspect(routine.id)}>Ver {routine.name}</button>
+                    <button className="btn btn-secondary btn-sm" type="button" onClick={() => void edit(routine.id)}>Editar {routine.name}</button>
                     <button className="btn btn-error btn-sm" type="button" onClick={() => void remove(routine)}>Eliminar {routine.name}</button>
                   </div>
                 </div>
