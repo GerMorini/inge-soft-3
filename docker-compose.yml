@@ -15,25 +15,6 @@ services:
       timeout: 3s
       retries: 15
 
-  migrate:
-    image: postgres:18.4-alpine
-    environment:
-      PGHOST: db
-      PGPORT: "5432"
-      PGUSER: ${POSTGRES_USER:-app}
-      PGPASSWORD: ${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD}
-      PGDATABASE: ${POSTGRES_DB:-inge_soft_3}
-    volumes:
-      - ./backend/migrations:/migrations:ro
-    command:
-      - psql
-      - --set=ON_ERROR_STOP=1
-      - --file=/migrations/001_create_users.up.sql
-      - --file=/migrations/002_create_exercise_routines.up.sql
-    depends_on:
-      db:
-        condition: service_healthy
-
   backend:
     build:
       context: ./backend
@@ -44,8 +25,8 @@ services:
     expose:
       - "8080"
     depends_on:
-      migrate:
-        condition: service_completed_successfully
+      db:
+        condition: service_healthy
     restart: unless-stopped
 
   frontend:

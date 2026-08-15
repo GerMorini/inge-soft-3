@@ -18,6 +18,7 @@ import (
 	routinescontroller "github.com/gmorini/inge-soft-3/backend/internal/routines/controller"
 	routinesrepository "github.com/gmorini/inge-soft-3/backend/internal/routines/repository"
 	routinesservice "github.com/gmorini/inge-soft-3/backend/internal/routines/service"
+	"github.com/gmorini/inge-soft-3/backend/migrations"
 )
 
 func main() {
@@ -46,6 +47,9 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		return err
 	}
 	defer pool.Close()
+	if err := migrations.Apply(ctx, pool); err != nil {
+		return err
+	}
 
 	identityRepository := identityrepository.New(pool)
 	tokenManager, err := identityservice.NewTokenManager(cfg.JWTSecret)

@@ -41,7 +41,6 @@ trap cleanup EXIT INT TERM
 
 docker compose stop backend frontend >/dev/null 2>&1 || true
 docker compose up -d db
-docker compose run --rm migrate
 
 if [[ ! -d frontend/node_modules ]]; then
   (cd frontend && npm ci)
